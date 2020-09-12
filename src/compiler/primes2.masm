@@ -1,0 +1,115 @@
+	SYSCALL		3, 16, 16, 20, 8, 3
+	
+	$INIT	rLINK=r1e
+	INIT.int	zero=r0,0
+	INIT.int	print=r1,0
+	INIT.int	console=r10, 0x5000
+	INIT.int	cursor=r11, console
+	INIT.int	max, [maxFibValue]
+	
+	
+	MOV	print, 2
+	JAL printInt
+	MOV	print, 3
+	JAL printInt
+	INIT.int	n, 3
+nextPrime:
+	ADD	n, 2
+	
+	INIT.int low, 0
+	INIT.int high, n
+3:	INIT.int temp, high+-1
+	Je 2f CMP	low, temp
+	$FREE temp
+	INIT.int mid, low+high
+	SHR mid, 1
+	INIT.int midSquared, mid
+	MUL 	midSquared, midSquared
+	Jg 1f CMP	midSquared, n
+	MOV low, mid
+	JMP 3b
+1:	Jl 2f CMP	midSquared, n
+	MOV high, mid
+	JMP 3b
+2:	$INIT	sqrt=low
+	$FREE	low, high, mid, midSquared
+	
+	INIT.int mod, 3
+3:	INIT.int subber, n
+	MOD		subber, mod
+	Jz nextPrime subber
+	ADD		mod, 2 
+	JL 3b CMP	mod, n
+	MOV	print, n
+	JAL printInt
+	
+	#SYSCALL 1, 1000
+	JL nextPrime CMP	n, max
+	JMP end
+	$FREE	mod, subber
+	
+maxFibValue:
+	$DATA.int	1000000000
+	
+	
+	
+powersOfTen:
+	$DATA.int	1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1, 0
+binaryCodedDecimals:
+	$DATA.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	
+intToString: $INIT	input=r1
+	INIT.int	powers, powersOfTen
+	INIT.int	bcds, binaryCodedDecimals
+3:	INIT.int	sum, [powers]
+	INIT.byte	num, 0x30
+1:	Jl 2f CMP	input, sum
+	SUB		input, sum 
+	INC		num
+	JMP 1b
+2:	SET		num, [bcds]
+	ADD		powers, 32
+	ADD		bcds, 8
+	Jne 3b CMP	sum,1
+4:	RET
+	$FREE	input, powers, bcds, sum, num
+
+printInt: $INIT	input=r1
+	INIT.int	tempLINK=r1d, rLINK
+	JAL intToString
+	MOV	rLINK, tempLINK
+	INIT.int	bcds, binaryCodedDecimals
+	SUB	bcds, 8
+1:	INIT.byte	char, [bcds+8]
+	ADD	bcds, 8
+	Jz 2f char
+	Je 1b CMP	char, 0x30
+	JMP 1f
+2:	SUB	bcds, 8
+1:	INIT.byte	char, [bcds]
+	Jz 2f char
+	SET		char, [cursor]
+	ADD	cursor, 8
+	ADD	bcds, 8
+	JMP 1b
+2:	$FREE tempLINK, bcds, char
+	ANDN	cursor, 0xff
+	LEA		cursor, cursor+0x100
+	INIT.int	cursorMax, 0x6000
+	JL 1f CMP	cursor, cursorMax
+	LEA	cursor, 0x5000
+	LEA	cursorMax, 0x5f00
+2:	INIT.int	chars, [cursor+0x100]
+	SET		chars, [cursor]
+	ADD cursor, 16
+	JL 2b CMP	cursor, cursorMax
+1:	CLR		chars
+	SET		chars, [cursor+0]
+	SET		chars, [cursor+32]
+	SET		chars, [cursor+64]
+	SET		chars, [cursor+96]
+
+	RET
+	
+end:
+	SYSCALL

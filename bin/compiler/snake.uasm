@@ -1,0 +1,115 @@
+LEA.32	r0,[r0+0]
+LEA.32	r1,[r0+0]
+LEA.32	r2,[r0+0]
+LEA.32	r3,[r0+5]
+LEA.32	r4,[r0+5]
+LEA.8	r5,[r0+5]
+LEA.4	r6,[r0+0x0]
+LEA.32	r7,[r0+0x6800]
+LEA.32	r8,[r0+0x6800]
+LEA.4	r9,[r0+0]
+LEA.2	ra,[r0+0]
+LEA.4	rb,[r0+0]
+LEA.2	rc,[r0+0]
+LEA.2	rd,[r0+0]
+LEA.32	re,[r0+0x400]
+LEA.2	rf,[r0+0]
+LEA.2	r10,[r0+0]
+LEA.32	r11,[r0+0]
+LEA.32	r12,[r0+0x7000]
+LEA.8	r13,[r0+0]
+LEA.8	r14,[r0+0]
+LEA.1	r15,[r0+0]
+LEA.1	r16,[r0+1]
+LEA.32	r17,[r0+0]
+LEA.32	r18,[r0+0x100]
+LEA.32	r19,[r0+0x7000]
+LEA.32	r1a,[r0+0x5000]
+LEA.1	r1b,[r0+0]
+LEA.32	r1c,[r0+0x6000]
+LEA.32	r1d,[r0+0]
+LEA.32	r1e,[r0+0]
+GET	r1b,[r1c+4]
+Je 0x2 CMP	r1b,0x1
+JMP 0x7fffffe
+GET	r1b,[r1c+4]
+Je 0x2 CMP	r1b,0x0
+JMP 0x7fffffe
+LEA	r7,[r0+0x6800]
+LEA	r8,[r0+0x6800]
+RIGHT	r1,r1,1
+SET	r1,[r7+0]
+RIGHT	r1,r1,0
+RIGHT	r2,r2,0
+RIGHT	r3,r3,5
+RIGHT	r4,r4,5
+RIGHT	r5,r5,5
+RIGHT	rf,rf,1
+GET	r9,[r0+0x6000]
+GET	ra,[r8+0]
+ANDN	rb,r9,1*r6
+RIGHT	r6,r6,1*r9
+Je 0x12 CMP	rb,0
+Je 0x9 AND	ra,0b10
+GET	rc,[r1c+0]
+Je 0xf CMP	rc,0
+AND	rb,rb,0xc
+AND	rc,rc,1
+ADD	r8,r8,2
+SET	rc,[r8+0]
+ANDN	r8,r8,1*r18
+JMP 0x7fffff7
+GET	rd,[r1c+2]
+Je 0x7 CMP	rd,0
+AND	rb,rb,0x3
+OR	rd,rd,2
+ADD	r8,r8,2
+SET	rd,[r8+0]
+ANDN	r8,r8,1*r18
+JMP 0x7ffffef
+Je 0x4 CMP	r7,1*r8
+ADD	r7,r7,2
+GET	rf,[r7+0]
+ANDN	r7,r7,1*r18
+LEA	r10,[rf+1*rf+0xff]
+Jne 0x4 AND	rf,0b10
+IADD	r2,r10,1*r2
+Jge 0x53 CMP	r2,16
+JMP 0x3
+IADD	r1,r10,1*r1
+Jge 0x50 CMP	r1,16
+LEA	r17,[r2+16*r1+0]
+GET	r13,[r12+8*r17+0]
+Jne 0x4d CMP	r13,0
+SET	r5,[r12+8*r17+0]
+Jne 0xf CMP	r2,1*r3
+Jne 0xe CMP	r1,1*r4
+ADD	r5,r5,3
+RAND	r3,r0,16
+RAND	r4,r0,16
+LEA	r17,[r3+16*r4+0]
+GET	r13,[r12+8*r17+0]
+Jne 0x7c CMP	r13,0
+RIGHT	r17,r17,0
+GET	r14,[r19+8*r17+0]
+Je 0x3 CMP	r14,0
+ADD	r14,r14,3
+SET	r14,[r19+8*r17+0]
+ADD	r17,r17,1
+Jl 0x7b CMP	r17,1*r18
+RIGHT	r17,r17,0
+GET	r14,[r19+8*r17+0]
+Je 0x7 CMP	r14,0
+SET	r16,[r1a+1*r17+0]
+SUB	r14,r14,1
+SET	r14,[r19+8*r17+0]
+ADD	r17,r17,1
+Jl 0x7a CMP	r17,1*r18
+JMP 0x4
+SET	r15,[r1a+1*r17+0]
+ADD	r17,r17,1
+Jl 0x76 CMP	r17,1*r18
+LEA	r17,[r3+16*r4+0]
+SET	r16,[r1a+1*r17+0]
+JAL 1*r0+0x400
+JMP 0x7ffffbd

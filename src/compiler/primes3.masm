@@ -1,0 +1,56 @@
+	SYSCALL		3, 16, 16, 20, 8, 3
+	
+	$INIT	rLINK=r1e
+	INIT.int	zero=r0,0
+	INIT.int	print=r1,0
+	INIT.int	console=r10, 0x5000
+	INIT.int	cursor=r11, console
+	INIT.int	max, [maxFibValue]
+	
+	
+	MOV	print, 2
+	SYSCALL 4
+	MOV	print, 3
+	SYSCALL 4
+	INIT.int	n, 3
+nextPrime:
+	ADD	n, 2
+	
+	INIT.int low, 0
+	INIT.int high, n
+3:	INIT.int temp, high+-1
+	Je 2f CMP	low, temp
+	$FREE temp
+	INIT.int mid, low+high
+	SHR mid, 1
+	INIT.int midSquared, mid
+	MUL 	midSquared, midSquared
+	Jg 1f CMP	midSquared, n
+	MOV low, mid
+	JMP 3b
+1:	Jl 2f CMP	midSquared, n
+	MOV high, mid
+	JMP 3b
+2:	$INIT	sqrt=low
+	$FREE	low, high, mid, midSquared
+	
+	INIT.int mod, 3
+3:	INIT.int subber, n
+	MOD		subber, mod
+	Jz nextPrime subber
+	ADD		mod, 2 
+	JL 3b CMP	mod, n
+	MOV	print, n
+	SYSCALL 4
+	
+	#SYSCALL 1, 1000
+	JL nextPrime CMP	n, max
+	JMP end
+	$FREE	mod, subber
+
+maxFibValue:
+	$DATA.int	1000000000
+	
+		
+end:
+	SYSCALL

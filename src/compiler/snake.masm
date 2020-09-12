@@ -1,0 +1,124 @@
+	SYSCALL		3,16,16,20,1,0
+	
+	INIT.int	zero=r0,0
+	INIT.int	sleepMilis=r1,100
+	INIT.nibble	lastkeys,0x0
+	INIT.nibble	keysedge,0
+	INIT.int	end,0x400
+	INIT.int	valuestart,0x7000
+	INIT.int	graphicsBase,0x5000
+	INIT.int	keysetBase,0x6000
+	
+8:	SYSCALL		2
+	
+3:	INIT.int	keystart,0x6800
+	INIT.int	keyend,0x6800
+	INIT.int	y,0
+	INIT.int	x,4
+	INIT.int	cx,5
+	INIT.int	cy,5
+	INIT.byte	len,5
+	INIT.couple	dir,0
+	INIT.int	temp,1
+	SET	temp,[keystart]
+	INIT.int	temp,0
+	INIT.int	index,0
+1:	SET	temp,[valuestart+8*index]
+	SET temp,[graphicsBase+index]
+	ADD	index,4
+	Jl 1b CMP	index,end
+	INIT.byte	temp, 0b00011111
+	SET temp,[graphicsBase]
+	INIT.int	temp, [initSnakeValues]
+	SET temp,[valuestart]
+	SET	len,[valuestart+32]
+	SYSCALL		1, 1000
+	$FREE	index,temp
+	JMP 9f
+
+
+initSnakeValues:
+	#$DATA.byte	0b00000100, 0b00000011, 0b00000010, 0b00000001
+	$DATA.byte	0b00000001, 0b00000010, 0b00000011, 0b00000100
+	#$DATA.int	0x04030201
+
+	
+9:	INIT.nibble	keyset,[keysetBase]
+	ANDN	keysedge,keyset,lastkeys
+	MOV	lastkeys,keyset
+3:	Jz 1f keysedge
+	INIT.couple	taildir,[keyend]
+	Je 2f AND	taildir,0b10
+	INIT.couple	horiz,[keysetBase+0]
+	Jz 1f horiz
+	AND	keysedge,0xc
+	AND	horiz,1
+	ADD	keyend,2
+	SET	horiz,[keyend]
+	ANDN	keyend,end
+	JMP 3b
+2:	INIT.couple	vert,[keysetBase+2]
+	Jz 1f vert
+	AND	keysedge,0x3
+	OR	vert,2
+	ADD	keyend,2
+	SET	vert,[keyend]
+	ANDN	keyend,end
+	JMP 3b
+	$FREE	keyset,taildir,horiz,vert
+	
+1:	Je 3f CMP	keystart,keyend
+	ADD	keystart,2
+	ANDN	keystart,end
+3:	GET	dir,[keystart]
+	INIT.couple	adjusted,dir+1*dir+-1
+	Jne 2f AND	dir,0b10
+	IADD	x,adjusted,x
+	Jge 8b CMP	x,16
+	JMP 3f
+2:	IADD	y,adjusted,y
+	Jge 8b CMP	y,16
+3:	INIT.int	index,x+16*y
+	INIT.byte	collide,[valuestart+8*index]
+	Jnz 8b collide
+	SET	len,[valuestart+8*index]
+	$FREE	index,adjusted,collide
+	
+	Jne 1f CMP	x,cx
+	Jne 1f CMP	y,cy
+	ADD	len,3
+4:	RAND	cx,r0,16
+	RAND	cy,r0,16
+	INIT.int	index,cx+16*cy
+	INIT.byte	collide,[valuestart+8*index]
+	Jnz 4b collide
+	INIT.int	index,0
+2:	INIT.byte	value,[valuestart+8*index]
+	Jz 3f value
+	ADD	value,3
+	SET	value,[valuestart+8*index]
+3:	INC	index
+	Jl 2b CMP	index,end
+	$FREE	index,value,collide
+	
+1:	INIT.int	index,0
+	INIT.bit	bit0,0
+	INIT.bit	bit1,1
+4:	INIT.byte	value,[valuestart+8*index]
+	Jz 2f value
+	SET	bit1,[graphicsBase+1*index]
+	DEC	value
+	SET	value,[valuestart+8*index]
+	INC	index
+	Jl 4b CMP	index,end
+	JMP 3f
+2:	SET	bit0,[graphicsBase+1*index]
+	INC	index
+	Jl 4b CMP	index,end
+3:	LEA	index,[cx+16*cy]
+	SET	bit1,[graphicsBase+1*index]
+	$FREE	index,value,bit0,bit1
+	
+	SYSCALL		1, 100
+	JMP 9b
+	
