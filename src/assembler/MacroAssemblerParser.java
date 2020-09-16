@@ -1,9 +1,7 @@
-package compiler;
+package assembler;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -12,48 +10,22 @@ import java.util.Scanner;
 import lib.HardcodedLibrary;
 
 @SuppressWarnings("serial")
-public class MacroAssembler {
+public class MacroAssemblerParser {
+
+
+	private final ArrayList<String> microASM = new ArrayList<String>();
+	private final HashMap<String, Integer> labelNamesToMicroAddresses = new HashMap<String, Integer>();
+
+	private int allocatedRegistersMap = 0;
 	
-//	final static File file = new File("src/compiler/snake.masm");
-//	final static File file = new File("src/compiler/fibonacci.masm");
-	final static File file = new File("src/compiler/primes2.masm");
-	final static File output = new File("src/compiler/o.uasm");
-	
-	ArrayList<String> microASM = new ArrayList<String>();
-//	ArrayList<String> microLabels = new ArrayList<String>();
-	
-	ArrayList<String> labelNames = new ArrayList<String>();
-	ArrayList<Integer> labelMacroAddresses = new ArrayList<Integer>();
-	int[] currentNumberedLabel = new int[10];
-	HashMap<String, Integer> labelNamesToMicroAddresses = new HashMap<String, Integer>();
-	
-	MacroAssembler(File file, File output) {
-		try {
-			Scanner sc = new Scanner(file);
-			while(sc.hasNext()) {
-				String s = sc.nextLine();
-				
-				String[] lexed = lexer(s);
-//				System.out.println(Arrays.toString(lexed));
-				if(lexed != null) {
-					parse(lexed);
-					currentMacroAddress++;
-				}
+	ArrayList<String> macroAssemblerParser(ArrayList<String[]> macroLexed) {
+		for(String[] s : macroLexed) {
+			if(s.length == 32) {
+				parse(s);
+			} else {
+				labelNamesToMicroAddresses.put(s[0], microASM.size());
 			}
-			sc.close();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
 		}
-		
-//		for(int i = 0; i < microASM.size(); i++) {
-//			if(labelNamesToMicroAddresses.containsValue(i)) {
-//				for(Entry<String, Integer> e : labelNamesToMicroAddresses.entrySet()) {
-//					if(e.getValue().equals(i))
-//						System.out.println(Integer.toHexString(i) + "\t" + e.getKey() + ":");
-//				}
-//			}
-//			System.out.println(Integer.toHexString(i) + "\t" + microASM.get(i));
-//		}
 		
 		for (int currentAddr = 0; currentAddr < microASM.size(); currentAddr++) {
 			if (microASM.get(currentAddr).contains(":")) {
@@ -73,119 +45,11 @@ public class MacroAssembler {
 			}
 		}
 		
-		try {
-			FileWriter fw = new FileWriter(output);
-			fw.write("");
-			for (String line : microASM) {
-				fw.append(line + "\n");
-			}
-			fw.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-	}
-
-	String[] lexer(String line) {
-//		System.out.println(line);
-		int len = line.length();
-		if(len == 0)
-			return null;
-		char[] chars = line.toCharArray();
-		
-		StringBuilder command = new StringBuilder();
-		
-		int i = 0;
-		char c = chars[i];
-		while (i < len) {
-			if(c == ' ' || c == '\t') {
-				while (++i < len && ((c = chars[i]) == ' ' || c == '\t'));
-			}
-			else if(c == ':') {
-				if(command.length() == 0) throw new ParseException("Invalid Labelname");
-				String labelName = command.toString();
-				if(labelName.matches("[1-9]\\d*")) {
-					int n = Integer.parseInt(labelName);
-					command.append("#");
-					command.append(currentNumberedLabel[n]);
-					currentNumberedLabel[n]++;
-				}
-				labelNames.add(command.toString());
-				labelMacroAddresses.add(currentMacroAddress);
-				command.setLength(0);
-				if(++i < len) c = chars[i];
-			}
-			else if(Character.isLetterOrDigit(c) || c == '$') {
-				if(command.length() > 0)
-					break;
-				do command.append(c);
-				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=');
-			}
-			else if(c == '#' || c == '-') {
-				break;
-			}
-			else throw new ParseException("Did not recognize command \'" + c + "\'");
-		}
-		
-		if(command.length() == 0)
-			return null;
-		String[] separated = new String[32];
-		separated[0] = command.toString();
-		int index = 1;
-		char separator = 0;
-		StringBuilder argument = new StringBuilder();
-		while (i < len) {
-			if(c == ' ' || c == '\t') {
-				separator = ' ';
-				while (++i < len && ((c = chars[i]) == ' ' || c == '\t'));
-			}
-			else if(c == ',' || c == '+' || c == '*') {
-				separator = c;
-				while (++i < len && ((c = chars[i]) == ' ' || c == '\t'));
-			}
-			else if(c == '[') {
-				if(separator != 0 && separator != ' ')
-					separated[index ++] = Character.toString(separator);
-				separated[index ++] = "[";
-				separator = 0;
-				while (++i < len && ((c = chars[i]) == ' ' || c == '\t'));
-				
-			}
-			else if(c == ']') {
-				if(separator != 0 && separator != ' ')
-					throw new ParseException("\']\' may not precede a separator");
-				separated[index ++] = "]";
-				separator = 0;
-				while (++i < len && ((c = chars[i]) == ' ' || c == '\t'));
-			}
-			else if(Character.isLetterOrDigit(c) || c == '$' || c == '-') {
-				do argument.append(c);
-				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=');
-				if(separator != 0) 
-					separated[index ++] = Character.toString(separator);
-				separated[index ++] = argument.toString();
-				separator = 0;
-				argument.setLength(0);
-			}
-			else if(c == '#') {
-				break;
-			}
-			else throw new ParseException("Did not recognize argument \'" + c + "\'");
-		}
-		if(separator != 0 && separator != ' ')
-			 throw new ParseException("Instructions may not end with a separator \'" + separator + "\'");
-		if(command.toString().startsWith("J")) {
-			String labelName = separated[1];
-			if(labelName.matches("[1-9]\\d*[bf]")) {
-				int labelNameN = currentNumberedLabel[labelName.charAt(0)-'0'];
-				separated[1] = labelName.charAt(1) == 'b' ? labelName.charAt(0)+"#"+(labelNameN-1) : labelName.charAt(0)+"#"+(labelNameN);
-			}
-		}
-		
-		return separated;
+		return microASM;
 	}
 	
 	void parse(String[] s) {
+//		System.out.println(Arrays.toString(s));
 		StringBuilder sb = new StringBuilder();
 		String command = s[0].toUpperCase();
 		if(command.matches("\\$FREE")) {
@@ -302,14 +166,14 @@ public class MacroAssembler {
 					sb.append(" #");
 				}
 			} else {
-				String src1 = s[5];
-				String src2 = s[7];
-				String cmp = s[3];
+				String src1 = s[3];
+				String src2 = s[5];
+				String cmp = s[2];
 				if(!cond.contains(command)) throw new ParseException("Condition does not exist: " + s[0]);
 				if(!compare.contains(cmp.toUpperCase())) {
-					if(s[4] == null && command.matches("JN?Z")) {
+					if(s[3] == null && command.matches("JN?Z")) {
 						cmp = "OR";
-						src1 = s[3];
+						src1 = s[2];
 						src2 = "0";
 					}else
 						throw new ParseException("Compare does not exist: " + s[3]);
@@ -405,32 +269,16 @@ public class MacroAssembler {
 		else
 			throw new ParseException(" :: TODO: " + command);
 	}
-	
-	int currentLabelIndex = 0;
-	int currentMacroAddress = 0;
-	int currentMicroAddress = 0;
+
 	void addInstr(StringBuilder sb) {
 		addInstr(sb.toString());
 	}
 	void addInstr(String line) {
 		microASM.add(line);
-		
-		while (currentLabelIndex < labelMacroAddresses.size()
-				&& labelMacroAddresses.get(currentLabelIndex) <= currentMacroAddress) {
-			labelNamesToMicroAddresses.put(labelNames.get(currentLabelIndex), currentMicroAddress);
-			currentLabelIndex++;
-		}
-		currentMicroAddress++;
 	}
 	void addData(int i) {
 		microASM.add(".data	0x" + Integer.toHexString(i));
 		
-		while (currentLabelIndex < labelMacroAddresses.size()
-				&& labelMacroAddresses.get(currentLabelIndex) <= currentMacroAddress) {
-			labelNamesToMicroAddresses.put(labelNames.get(currentLabelIndex), currentMicroAddress);
-			currentLabelIndex++;
-		}
-		currentMicroAddress++;
 	}
 
 	void address(StringBuilder sb, String[] s, int start) {
@@ -524,7 +372,6 @@ public class MacroAssembler {
 		}
 	}
 	
-	int allocatedRegistersMap;
 	void allocateRegister(String name) {
 		if(regsMap.containsKey(name))
 			regsMap.remove(name);
@@ -607,7 +454,8 @@ public class MacroAssembler {
 			put("64", 64);
 			put("128", 128);
 		}
-	};	HashMap<String, String> regsMap = new HashMap<>();
+	};	
+	private final HashMap<String, String> regsMap = new HashMap<>();
 	private final HashSet<String> lib_op = new HashSet<String>() {
 		{
 			try {
@@ -644,7 +492,7 @@ public class MacroAssembler {
 			}
 		}
 	};
-	private final HashSet< String> cond = new HashSet<String>() {
+	private final HashSet<String> cond = new HashSet<String>() {
 		{
 			try {
 				Scanner sc = new Scanner(new File("src/lib/cond.txt"));
@@ -671,48 +519,5 @@ public class MacroAssembler {
 		
 	}
 	
-	public static void main(String[] args) {
-		File file = null;
-		File output = null;
-		try {
-			String flag = "";
-			if(args != null)
-				for(String s : args) {
-					if(s.startsWith("-")) {
-						if(flag == null)
-							throw new IOException("Invalid flag parameter: " + s);
-						else
-							flag = s.substring(1);
-					}
-					switch (flag) {
-					case "o":
-						if(output == null)
-							output = new File(s);
-						else
-							throw new IOException("Invalid flag parameter: " + s);
-						break;
-					case "":
-						if(file == null)
-							file = new File(s);
-						else
-							throw new IOException("Invalid flag parameter: " + s);
-						break;
-		
-					default:
-						throw new IOException("Invalid flag parameter: " + s);
-					}
-				}
-		}
-		catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-		if(file == null)
-			file = MacroAssembler.file;
-		if(output == null)
-			output = MacroAssembler.output;
-		
-		if(file.exists())
-			new MacroAssembler(file, output);
-	}
+	
 }

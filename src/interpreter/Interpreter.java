@@ -1,19 +1,13 @@
 package interpreter;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Scanner;
 
 import interpreter.GUI.RandomAccessMemoryUnit;
 import interpreter.GUI.SystemAgent;
-import lib.HardcodedLibrary;
 
-@SuppressWarnings("serial")
 public class Interpreter {
 
-	final RandomAccessMemoryUnit RAM;
+	private final RandomAccessMemoryUnit RAM;
 	final long[] reg = new long[32];
 	final byte[] regSize = new byte[32];
 	int rIP = 0;
@@ -29,9 +23,10 @@ public class Interpreter {
 	}
 
 	public void executeCycle() {
-		executeInstr(RAM.data[rIP]);
+		executeInstr(RAM.loadInstr(rIP));
 	}
-	void executeInstr(final long instr) {
+
+	public void executeInstr(final long instr) {
 		final int MOP = (int) ((instr >> 26) & 0xf);
 
 		final int LibOp_CondOp = (int) ((instr >> 8) & 0xff);
@@ -84,39 +79,39 @@ public class Interpreter {
 				break;
 
 			case 10:// LEA
-				reg[rDEST] = reg[rSRC] + SID;
+				reg[rDEST] = maskLowestNBits(reg[rSRC] + SID, regSize[rDEST]);
 				break;
 			case 11:// DP
-				reg[rDEST] = LIB_OP(LibOp_CondOp, reg[rSRC], shreg, regSize[rSRC]);
+				reg[rDEST] = maskLowestNBits(LIB_OP(LibOp_CondOp, reg[rSRC], shreg, regSize[rSRC]), regSize[rDEST]);
 				break;
 
 			case 12: {// LEA.d
 				final long dest = reg[rSRC] + SID;
 				final long mask = ((1 << regSize[rSRC]) - 1);
-				reg[rDEST] = reg[rDEST] & ~mask | dest & mask;
+				reg[rDEST] = maskLowestNBits(reg[rDEST] & ~mask | dest & mask, regSize[rDEST]);
 				break;
 			}
 			case 13: {// DP.d
 				final long dest = LIB_OP(LibOp_CondOp, reg[rSRC], shreg, regSize[rSRC]);
 				final long mask = ((1 << regSize[rSRC]) - 1);
-				reg[rDEST] = reg[rDEST] & ~mask | dest & mask;
+				reg[rDEST] = maskLowestNBits(reg[rDEST] & ~mask | dest & mask, regSize[rDEST]);
 				break;
 			}
 
 			case 14:// LEA.init
 				regSize[rDEST] = regSize[rSRC];
-				reg[rDEST] = reg[rSRC] + SID;
+				reg[rDEST] = maskLowestNBits(reg[rSRC] + SID, regSize[rDEST]);
 				break;
 			case 15:// DP.init
 				regSize[rDEST] = regSize[rSRC];
-				reg[rDEST] = LIB_OP(LibOp_CondOp, reg[rSRC], shreg, regSize[rSRC]);
+				reg[rDEST] = maskLowestNBits(LIB_OP(LibOp_CondOp, reg[rSRC], shreg, regSize[rSRC]), regSize[rDEST]);
 				break;
 			}
 		} else {
 			regSize[rDEST] = (byte) (1 << size);
 			
 			if ((instr & 0x04000000) == 0) { // LEA.size
-				reg[rDEST] = reg[rSRC] + SID;
+				reg[rDEST] = maskLowestNBits(reg[rSRC] + SID, regSize[rDEST]);
 			} else { // GET.size
 				reg[rDEST] = RAM.GET((int) (reg[rSRC] + SID), regSize[rDEST]);
 			}
@@ -126,7 +121,7 @@ public class Interpreter {
 		rIP = nextPC;
 	}
 
-	long LIB_OP(int lib_op, long src, long src2, byte xtSize) {
+	private long LIB_OP(int lib_op, long src, long src2, byte xtSize) {
 		int lib = lib_op >> 4;
 		int op = lib_op & 0xf;
 		switch (lib) {
@@ -185,7 +180,7 @@ public class Interpreter {
 		}
 		throw new IllegalArgumentException();
 	}
-	long COMP(int comp, long src, long src2, byte xtSize) {
+	private long COMP(int comp, long src, long src2, byte xtSize) {
 
 		switch (comp) {
 		case 0:
@@ -225,7 +220,7 @@ public class Interpreter {
 					"Literally impossible. COND is masked to 4 bits, all combinations of switch statement are present");
 		}
 	}
-	boolean COND(int comp, long result, byte size) {
+	private boolean COND(int comp, long result, byte size) {
 		boolean not = (comp & 1) != 0;
 		int op = comp >> 1;
 		switch (op) {
@@ -252,10 +247,12 @@ public class Interpreter {
 		
 	}
 
-	long sxt(long field, int bits) {
-		field &= (1l << bits) - 1;  // <= not needed as all instructions are masked to their size
+	private static long sxt(long field, int bits) {
+//		field &= (1l << bits) - 1;  // <= not needed as all instructions are masked to their size
 		final long i = 1l << (bits - 1);
 		return (field ^ i) - i;
 	}
-
+	private static long maskLowestNBits(long field, int bits) {
+		return field & ((1l << bits) - 1);
+	}
 }

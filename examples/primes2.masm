@@ -1,4 +1,4 @@
-	SYSCALL		3, 32, 16, 20, 8, 3
+	SYSCALL		3, 16, 16, 20, 8, 3
 	
 	$INIT	rLINK=r1e
 	INIT.int	zero=r0,0
@@ -8,18 +8,45 @@
 	INIT.int	max, [maxFibValue]
 	
 	
-	INIT.int	a, 0
-	INIT.int	b, 1
-	
-1:	MOV	print, a
+	MOV	print, 2
 	JAL printInt
-	INIT.int	temp, a+b
-	MOV	a, b
-	MOV	b, temp
-	#SYSCALL 1, 000
-	JL	1b	CMP	a, max
-	JMP end
+	MOV	print, 3
+	JAL printInt
+	INIT.int	n, 3
+nextPrime:
+	ADD	n, 2
 	
+	INIT.int low, 0
+	INIT.int high, n
+3:	INIT.int temp, high+-1
+	Je 2f CMP	low, temp
+	$FREE temp
+	INIT.int mid, low+high
+	SHR mid, 1
+	INIT.int midSquared, mid
+	MUL 	midSquared, midSquared
+	Jg 1f CMP	midSquared, n
+	MOV low, mid
+	JMP 3b
+1:	Jl 2f CMP	midSquared, n
+	MOV high, mid
+	JMP 3b
+2:	$INIT	sqrt=low
+	$FREE	low, high, mid, midSquared
+	
+	INIT.int mod, 3
+3:	INIT.int subber, n
+	MOD		subber, mod
+	Jz nextPrime subber
+	ADD		mod, 2 
+	JL 3b CMP	mod, n
+	MOV	print, n
+	JAL printInt
+	
+	#SYSCALL 1, 1000
+	JL nextPrime CMP	n, max
+	JMP end
+	$FREE	mod, subber
 	
 maxFibValue:
 	$DATA.int	1000000000
@@ -27,7 +54,6 @@ maxFibValue:
 	
 	
 powersOfTen:
-	#$DATA.int	1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
 	$DATA.int	1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1, 0
 binaryCodedDecimals:
 	$DATA.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -67,21 +93,22 @@ printInt: $INIT	input=r1
 	ADD	bcds, 8
 	JMP 1b
 2:	$FREE tempLINK, bcds, char
-	ANDN	cursor, 0xff
-	LEA		cursor, cursor+0x100
-	INIT.int	cursorMax, 0x6000
+
+	ANDN	cursor, 0x7f
+	LEA		cursor, cursor+0x80
+	INIT.int	cursorMax, 0x5800
 	JL 1f CMP	cursor, cursorMax
 	LEA	cursor, 0x5000
-	LEA	cursorMax, 0x5f00
-2:	INIT.int	chars, [cursor+0x100]
+	LEA	cursorMax, 0x5780
+2:	INIT.int	chars, [cursor+0x80]
 	SET		chars, [cursor]
-	ADD cursor, 32
+	ADD cursor, 16
 	JL 2b CMP	cursor, cursorMax
 1:	CLR		chars
 	SET		chars, [cursor+0]
 	SET		chars, [cursor+32]
-	SET		chars, [cursor+64]
-	SET		chars, [cursor+96]
+	#SET		chars, [cursor+64]
+	#SET		chars, [cursor+96]
 
 	RET
 	

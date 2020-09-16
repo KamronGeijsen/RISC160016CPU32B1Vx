@@ -18,8 +18,7 @@ import java.util.Arrays;
 
 import javax.swing.JFrame;
 
-import compiler.MacroAssembler;
-import compiler.MicroAssembler;
+import assembler.Assembler;
 
 /**
  * @author Kamron Geijsen
@@ -27,7 +26,7 @@ import compiler.MicroAssembler;
  */
 public class GUI extends JFrame{
 
-	private static final File defaultFile = new File("src/compiler/o.exe");
+	private static final File defaultFile = new File("examples/o.exe");
 	
 	private static final long serialVersionUID = -532126457262075773L;
 	private static final boolean START_PAUSED = true;
@@ -45,7 +44,7 @@ public class GUI extends JFrame{
 	
 	SystemAgent systemAgent;
 
-	MemObserver memObserver;
+	RAMObserver ramObserver;
 	RegObserver regObserver;
 	GridObserver gridObserver;
 	
@@ -61,7 +60,7 @@ public class GUI extends JFrame{
 	
 		
 		systemAgent = new SystemAgent(file);
-		memObserver = new MemObserver(systemAgent.RAM, 50, 50, 256, 256, 2);
+		ramObserver = new RAMObserver(systemAgent.RAM, 50, 50, 256, 256, 2);
 		regObserver = new RegObserver(systemAgent.interpreter.reg, systemAgent.interpreter.regSize, 600, 50, 16);
 		debugger = new Debugger(600, 700);
 		
@@ -79,7 +78,7 @@ public class GUI extends JFrame{
 		bf = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
 		Graphics g = bf.createGraphics();
 		systemAgent.executeHandler();
-		memObserver.draw(g);
+		ramObserver.draw(g);
 		regObserver.draw(g);
 		if(gridObserver != null) gridObserver.draw(g);
 		debugger.draw(g);
@@ -98,6 +97,12 @@ public class GUI extends JFrame{
 		repaint();
 	}
 
+	public interface MemoryInterface {
+		public long GET(int address, byte size);
+		public void SET(int address, byte size, long value);
+		public int loadInstr(int instrAddress);
+	}
+	
 	class Debugger {
 		
 		Debugger(int x, int y){
@@ -108,16 +113,25 @@ public class GUI extends JFrame{
 		final int drawX, drawY;
 		
 		long lastSecond;
+		long instrCounter;
 		long lastCountCyclesPerSecond;
 		long countCyclesPerSecond;
 		long lastCPUuptimePerSecond;
 		long CPUuptimePerSecond;
+		long countFramesPerSecond;
+		long lastFramesPerSecond;
+		
+
+		int lastAccess;
+		int lastSize;
+		boolean lastSet;
 		
 		void draw(Graphics g) {
 			g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
-			g.drawString("cycles/f : " + systemAgent.instrCounter, drawX, drawY);
+			g.drawString("cycles/f : " + instrCounter, drawX, drawY);
 			g.drawString("cycles/s : " + lastCountCyclesPerSecond, drawX, drawY+20);
 			g.drawString("uptime   : " + (long)(lastCPUuptimePerSecond/100_000.0)/100.0 + "%", drawX, drawY+40);
+			g.drawString("frames/s : " + lastFramesPerSecond, drawX, drawY+60);
 			
 			final long currentTime = System.currentTimeMillis();
 			if(lastSecond+1000 < currentTime) {
@@ -126,21 +140,20 @@ public class GUI extends JFrame{
 				countCyclesPerSecond=0;
 				lastCPUuptimePerSecond = CPUuptimePerSecond;
 				CPUuptimePerSecond=0;
+				lastFramesPerSecond = countFramesPerSecond;
+				countFramesPerSecond=0;
 			}
 			
-			countCyclesPerSecond += systemAgent.instrCounter;
-			systemAgent.instrCounter = 0;
+			countCyclesPerSecond += instrCounter;
+			instrCounter = 0;
+			countFramesPerSecond++;
 		}
 	}
-	class RandomAccessMemoryUnit {
-		final static int DEFAULT_RAM_SIZE = 65536; // Bits
-		int lastAccess;
-		int lastSize;
-		boolean lastSet;
-		final int[] data;
+	class RandomAccessMemoryUnit implements MemoryInterface {
+		private final int[] data;
 		
 		RandomAccessMemoryUnit() {
-			data = new int[DEFAULT_RAM_SIZE/32];
+			data = new int[SystemAgent.DEFAULT_RAM_SIZE/32];
 		}
 		RandomAccessMemoryUnit(int bits) {
 			data = new int[bits/32];
@@ -148,8 +161,9 @@ public class GUI extends JFrame{
 		RandomAccessMemoryUnit(int[] data) {
 			this.data = data;
 		}
-		
-		long GET(int address, byte size) {
+
+		@Override
+		public long GET(int address, byte size) {
 			final int intAlligned = address >>> 5;
 			final int unaligned = address & 0b11111;
 			long result = unaligned + size > 32 ? ((long)data[intAlligned+1]<<32)|data[intAlligned] : data[intAlligned];
@@ -157,7 +171,8 @@ public class GUI extends JFrame{
 			result &= (1l<<size)-1;
 			return result;
 		}
-		void SET(int address, byte size, long value) {
+		@Override
+		public void SET(int address, byte size, long value) {
 			final int intAlligned = address >>> 5;
 			final int unaligned = address & 0b11111;
 			long old = unaligned + size > 32 ? ((long)data[intAlligned+1]<<32)|data[intAlligned] : data[intAlligned];
@@ -171,9 +186,9 @@ public class GUI extends JFrame{
 		public long debugGET(int address, byte size) {
 			final int intAlligned = address >>> 5;
 			final int unaligned = address & 0b11111;
-			lastAccess = address;
-			lastSize = size;
-			lastSet=false;
+			debugger.lastAccess = address;
+			debugger.lastSize = size;
+			debugger.lastSet=false;
 			System.out.println("address: " + address + "/0x" + Integer.toHexString(address));
 			long result = unaligned + size > 32 ? data[intAlligned] + ((long)data[intAlligned+1]<<32) : data[intAlligned];
 			
@@ -188,9 +203,9 @@ public class GUI extends JFrame{
 		public void debugSET(int address, byte size, long data) {
 			final int intAlligned = address >>> 5;
 			final int unaligned = address & 0b11111;
-			lastAccess = address;
-			lastSize = size;
-			lastSet=true;
+			debugger.lastAccess = address;
+			debugger.lastSize = size;
+			debugger.lastSet=true;
 			System.out.println("address: " + address + "/0x" + Integer.toHexString(address));
 			long old = unaligned + size > 32 ? this.data[intAlligned] + ((long)this.data[intAlligned+1]<<32) : this.data[intAlligned];
 			System.out.println(Long.toHexString(intAlligned) + "|" + unaligned);
@@ -204,6 +219,11 @@ public class GUI extends JFrame{
 			if( unaligned + size > 32 )
 				this.data[intAlligned+1] = (int) (old >>> 32);
 		}
+		
+		@Override
+		public int loadInstr(int instrAddress) {
+			return data[instrAddress];
+		}
 	}
 	class SystemAgent {
 		
@@ -211,14 +231,16 @@ public class GUI extends JFrame{
 			this.program = program;
 			RAM = new RandomAccessMemoryUnit();
 			interpreter = new Interpreter(RAM, this);
-			disassembler = new Disassembler(interpreter);
+			disassembler = new Disassembler();
 			
 			this.reset();
 		}
 
 		public void reset() {
 			Arrays.fill(RAM.data, 0);
+			
 			try {
+//				ExecutableLinkableFormat.loadIntoMemory(program, RAM);
 				byte[] bytes = Files.readAllBytes(program.toPath());
 				IntBuffer intBuf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).asIntBuffer();
 				int[] array = new int[intBuf.remaining()];
@@ -236,6 +258,7 @@ public class GUI extends JFrame{
 		}
 
 		final File program;
+		final static int DEFAULT_RAM_SIZE = 65536; // Bits
 		final static int GRAPHICS_BASE = 0x5000;
 		final static int KEYSET_BASE = 0x6000;
 		final RandomAccessMemoryUnit RAM;
@@ -250,7 +273,7 @@ public class GUI extends JFrame{
 		boolean interruptWaitforTimer = false;
 		boolean interruptWaitForKey = false;
 		
-		long instrCounter = 0;
+		
 		
 		void executeHandler() {
 			if(interruptWaitforTimer && interruptTimerWait < System.currentTimeMillis()) {
@@ -265,7 +288,7 @@ public class GUI extends JFrame{
 			if(!paused && !interrupted) {
 				label: do {
 					for(int i = 0; i < 64; i++) {
-						instrCounter++;
+						debugger.instrCounter++;
 						interpreter.executeCycle();
 						if(RAM.data[interpreter.rIP] == 0) {
 							interrupted = true;
@@ -401,8 +424,7 @@ public class GUI extends JFrame{
 				systemAgent.paused=!systemAgent.paused;
 				systemAgent.interruptTimerWait = System.currentTimeMillis() + 0;
 			break;case f5:
-				MacroAssembler.main(null);
-				MicroAssembler.main(null);
+				Assembler.main(null);
 				systemAgent.reset();
 			}
 		}
@@ -424,8 +446,8 @@ public class GUI extends JFrame{
 		}
 	}
 	
-	class MemObserver {
-		public MemObserver(RandomAccessMemoryUnit RAM, int drawX, int drawY, int w, int h, int tile) {
+	class RAMObserver {
+		public RAMObserver(RandomAccessMemoryUnit RAM, int drawX, int drawY, int w, int h, int tile) {
 			this.drawX = drawX;
 			this.drawY = drawY;
 			drawW = tile*w;
@@ -450,7 +472,7 @@ public class GUI extends JFrame{
 						drawX += tile;
 					}else
 						for(int b = 0; b < memUnitSize; b++) {
-							int rgb = (data&1)==0?0:0x00ffffff;
+							int rgb = (data&1)==0?0:0xffffffff;
 							bf.setRGB(drawX, drawY, rgb);
 							bf.setRGB(drawX+1, drawY, rgb);
 							bf.setRGB(drawX, drawY+1, rgb);
@@ -473,12 +495,12 @@ public class GUI extends JFrame{
 			f = new Font(Font.MONOSPACED, Font.BOLD, size);
 			this.drawX = drawX;
 			this.drawY = drawY;
-			this.reg = reg;
-			this.regSize = regSize;
+			this.pointerTo_reg = reg;
+			this.pointerTo_regSize = regSize;
 		}
 		
-		final long[] reg; 
-		final byte[] regSize;
+		final long[] pointerTo_reg; 
+		final byte[] pointerTo_regSize;
 		
 		final Font f;
 		final int tileX, tileY;
@@ -488,10 +510,10 @@ public class GUI extends JFrame{
 			g.setColor(Color.WHITE);
 			g.setFont(f);
 			for(int y = 0; y < 32; y++) {
-				byte size = regSize[y];
+				byte size = pointerTo_regSize[y];
 				for(int x = 0; x < 32; x++) {
 					g.setColor(x<(size)?Color.WHITE:Color.LIGHT_GRAY);
-					g.drawString((reg[y]&(1<<x))!=0?"1":"0", this.drawX+(31-x)*tileX+1, this.drawY+y*tileY+tileY-2);
+					g.drawString((pointerTo_reg[y]&(1<<x))!=0?"1":"0", this.drawX+(31-x)*tileX+1, this.drawY+y*tileY+tileY-2);
 				}
 				g.setColor(Color.WHITE);
 				g.drawRect(this.drawX+(32-size)*tileX, this.drawY+y*tileY, size*tileX, tileY);
@@ -579,9 +601,6 @@ public class GUI extends JFrame{
 				drawY += tile;
 			}
 		}
-	}
-	class DebugObserver {
-		
 	}
 	
 	public static void main(String[] args) {

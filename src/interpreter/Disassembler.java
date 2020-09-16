@@ -7,13 +7,8 @@ import java.util.Scanner;
 
 import lib.HardcodedLibrary;
 
+@SuppressWarnings("serial")
 public class Disassembler {
-	
-	final Interpreter interpreter;
-	
-	Disassembler(Interpreter interpreter) {
-		this.interpreter = interpreter;
-	}
 	
 	String disassemble(final long instr) {
 		final int MOP = (int) ((instr >> 26) & 0xf);

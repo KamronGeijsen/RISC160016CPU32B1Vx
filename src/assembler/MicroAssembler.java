@@ -1,12 +1,8 @@
-package compiler;
+package assembler;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Scanner;
 
@@ -16,18 +12,11 @@ import lib.HardcodedLibrary;
 @SuppressWarnings("serial")
 public class MicroAssembler {
 	
-	void assemble(Scanner sc, OutputStream os, PrintStream os2) throws IOException {
-		DataOutputStream dos = new DataOutputStream(os);
-//		DataOutputStream dos2 = new PrintStream(os2);
-		while(sc.hasNext()) {
-			int instr = parse(sc.nextLine());
-			
-			dos.writeInt(instr);
-			os2.println(Long.toBinaryString(Integer.toUnsignedLong(instr) | 1l<<32).substring(1));
-		}
-		sc.close();
-		dos.flush();
-		dos.close();
+	int[] assemble(ArrayList<String> microAssembly) {
+		int[] binaryInstructions = new int[microAssembly.size()];
+		for(int i = 0; i < binaryInstructions.length; i++)
+			binaryInstructions[i] = parse(microAssembly.get(i));
+		return binaryInstructions;
 	}
 	
 	int parse(String s) {
@@ -221,16 +210,5 @@ public class MicroAssembler {
 	};
 	
 	
-	public static void main(String[] args) {
-		try {
-			Scanner sc = new Scanner(new File("src/compiler/o.uasm"));
-			FileOutputStream fos = new FileOutputStream(new File("src/compiler/o.exe"));
-			PrintStream fos2 = new PrintStream(new File("src/compiler/o.bin"));
-			
-			new MicroAssembler().assemble(sc, fos, fos2);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-	}
+	
 }
