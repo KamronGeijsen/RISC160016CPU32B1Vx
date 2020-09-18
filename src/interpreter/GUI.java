@@ -13,12 +13,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
-import java.nio.file.Files;
 import java.util.Arrays;
 
 import javax.swing.JFrame;
 
 import assembler.Assembler;
+import lib.ExecutableLinkableFormat;
 
 /**
  * @author Kamron Geijsen
@@ -101,6 +101,7 @@ public class GUI extends JFrame{
 		public long GET(int address, byte size);
 		public void SET(int address, byte size, long value);
 		public int loadInstr(int instrAddress);
+		public void loadProgram(int[] o1, int i1, int i2, int len);
 	}
 	
 	class Debugger {
@@ -149,7 +150,7 @@ public class GUI extends JFrame{
 			countFramesPerSecond++;
 		}
 	}
-	class RandomAccessMemoryUnit implements MemoryInterface {
+	public class RandomAccessMemoryUnit implements MemoryInterface {
 		private final int[] data;
 		
 		RandomAccessMemoryUnit() {
@@ -224,11 +225,15 @@ public class GUI extends JFrame{
 		public int loadInstr(int instrAddress) {
 			return data[instrAddress];
 		}
+		@Override
+		public void loadProgram(int[] o1, int i1, int i2, int len) {
+			System.arraycopy(o1, i1, data, i2, len);
+		}
 	}
-	class SystemAgent {
+	public class SystemAgent {
 		
 		SystemAgent(File program){
-			this.program = program;
+			this.programFile = program;
 			RAM = new RandomAccessMemoryUnit();
 			interpreter = new Interpreter(RAM, this);
 			disassembler = new Disassembler();
@@ -240,12 +245,14 @@ public class GUI extends JFrame{
 			Arrays.fill(RAM.data, 0);
 			
 			try {
-//				ExecutableLinkableFormat.loadIntoMemory(program, RAM);
-				byte[] bytes = Files.readAllBytes(program.toPath());
-				IntBuffer intBuf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).asIntBuffer();
-				int[] array = new int[intBuf.remaining()];
-				intBuf.get(array);
-				System.arraycopy(array, 0, RAM.data, 0, array.length);
+				Integer rIP = 0;
+				byte[] programData = ExecutableLinkableFormat.loadProgramData(programFile, rIP);
+
+				IntBuffer intBuf = ByteBuffer.wrap(programData).order(ByteOrder.BIG_ENDIAN).asIntBuffer();
+				int[] arr = new int[intBuf.remaining()];
+				intBuf.get(arr);
+				RAM.loadProgram(arr, 0, 0, arr.length);
+				
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -257,7 +264,7 @@ public class GUI extends JFrame{
 			gridObserver = null;
 		}
 
-		final File program;
+		final File programFile;
 		final static int DEFAULT_RAM_SIZE = 65536; // Bits
 		final static int GRAPHICS_BASE = 0x5000;
 		final static int KEYSET_BASE = 0x6000;

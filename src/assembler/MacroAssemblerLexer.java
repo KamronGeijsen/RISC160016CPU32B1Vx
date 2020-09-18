@@ -1,6 +1,7 @@
 package assembler;
 
 import java.util.ArrayList;
+import java.util.Scanner;
 
 public class MacroAssemblerLexer {
 
@@ -10,6 +11,11 @@ public class MacroAssemblerLexer {
 	public ArrayList<String[]> macroAssemblerLexer(ArrayList<String> macroAssembly) {
 		for(String s : macroAssembly)
 			lexer(s, macroParsed);
+		return macroParsed;
+	}
+	public ArrayList<String[]> macroAssemblerLexer(Scanner sc) {
+		while(sc.hasNextLine())
+			lexer(sc.nextLine(), macroParsed);
 		return macroParsed;
 	}
 

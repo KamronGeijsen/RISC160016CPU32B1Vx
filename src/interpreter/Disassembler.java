@@ -10,7 +10,7 @@ import lib.HardcodedLibrary;
 @SuppressWarnings("serial")
 public class Disassembler {
 	
-	String disassemble(final long instr) {
+	public String disassemble(final long instr) {
 		final int MOP = (int) ((instr >> 26) & 0xf);
 
 		final int LibOp_CondOp = (int) ((instr >> 8) & 0xff);

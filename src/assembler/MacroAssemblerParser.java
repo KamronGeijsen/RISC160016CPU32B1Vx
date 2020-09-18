@@ -13,20 +13,32 @@ import lib.HardcodedLibrary;
 public class MacroAssemblerParser {
 
 
-	private final ArrayList<String> microASM = new ArrayList<String>();
+	
 	private final HashMap<String, Integer> labelNamesToMicroAddresses = new HashMap<String, Integer>();
 
 	private int allocatedRegistersMap = 0;
 	
 	ArrayList<String> macroAssemblerParser(ArrayList<String[]> macroLexed) {
+		ArrayList<String> microASM = new ArrayList<String>();
 		for(String[] s : macroLexed) {
 			if(s.length == 32) {
-				parse(s);
+
+//				for(int i = 0; i < 32; i++)
+//					if(s[i] == null) {
+//						System.out.println(i);
+//						break;
+//					}
+				parse(s, microASM);
 			} else {
 				labelNamesToMicroAddresses.put(s[0], microASM.size());
 			}
 		}
+		insertLabels(microASM);
 		
+		return microASM;
+	}
+	
+	void insertLabels(ArrayList<String> microASM) {
 		for (int currentAddr = 0; currentAddr < microASM.size(); currentAddr++) {
 			if (microASM.get(currentAddr).contains(":")) {
 				String[] parts = microASM.get(currentAddr).split(":", 2);
@@ -34,7 +46,7 @@ public class MacroAssemblerParser {
 				if (addr == null)
 					throw new ParseException("Label not found: " + parts[0]);
 				String name = parts[1];
-				if(name.matches("J(MP|AL).*") ) 
+				if(name.startsWith("JMP") || name.startsWith("JAL")) 
 					addr = addr - currentAddr & 0x7ffffff;
 				else if(name.startsWith("J")) 
 					addr = addr - currentAddr & 0x7f;
@@ -44,12 +56,11 @@ public class MacroAssemblerParser {
 				microASM.set(currentAddr, parts[1].replaceFirst("#", "0x" + (Integer.toHexString(addr))));
 			}
 		}
-		
-		return microASM;
 	}
 	
-	void parse(String[] s) {
-//		System.out.println(Arrays.toString(s));
+	void parse(String[] s, ArrayList<String> microASM) {
+		
+//		System.out.println(java.util.Arrays.toString(s));
 		StringBuilder sb = new StringBuilder();
 		String command = s[0].toUpperCase();
 		if(command.matches("\\$FREE")) {
@@ -79,13 +90,13 @@ public class MacroAssemblerParser {
 				for(int i = 1; s[i] != null; i+=2) {
 					tempInt |= (toImm(s[i]) & ((1l << size) - 1)) << effectiveSize;
 					if((effectiveSize += size) == 32) {
-						addData(tempInt);
+						microASM.add(".data	0x" + Integer.toHexString(tempInt));
 						tempInt = effectiveSize = 0;
 					}
 					
 				}
 				if(effectiveSize != 0) {
-					addData(tempInt);
+					microASM.add(".data	0x" + Integer.toHexString(tempInt));
 				}
 				
 			}
@@ -119,10 +130,10 @@ public class MacroAssemblerParser {
 				sb.append(sbss[1]);
 				sb.append(':');
 				sb.append(sbss[0]);
-				addInstr(sb);
+				microASM.add(sb.toString());
 			}
 			else
-				addInstr(sbs);
+				microASM.add(sbs);
 		}
 		else if(command.matches("(SET|GET|LEA(|\\.D|\\.INIT))")) {
 			boolean implicitAddress = command.startsWith("LEA") && !s[3].contentEquals("[");
@@ -131,8 +142,8 @@ public class MacroAssemblerParser {
 			sb.append(register(s[1]));
 			sb.append(',');
 			address(sb, s, implicitAddress?3:4);
-			
-			addInstr(sb);
+
+			microASM.add(sb.toString());
 		}
 		else if(lib_op.contains(command.toUpperCase())) {
 			String src1 = s[5] != null ? s[3] : s[1];
@@ -149,8 +160,7 @@ public class MacroAssemblerParser {
 				sb.append("1*");
 				sb.append(register(src2));
 			}
-			
-			addInstr(sb);
+			microASM.add(sb.toString());
 		}
 		else if(command.startsWith("J")) {
 			if(command.matches("(JMP|JAL)")) {
@@ -204,7 +214,7 @@ public class MacroAssemblerParser {
 					sb.append(register(src2));
 				}
 			}
-			addInstr(sb);
+			microASM.add(sb.toString());
 		}
 		else if(command.matches("SYSCALL")) {
 			for(int i = 3; s[i] != null; i+=2) {
@@ -213,22 +223,22 @@ public class MacroAssemblerParser {
 				int l = toImm(s[i]);
 				if((l|0x7fff) > 0x7fff)
 					 throw new ParseException("Immediate overload");
-				addInstr("LEA.32	r"+Integer.toHexString(i/2)+",[r0+0x" + Integer.toHexString(l)+"]");
+				microASM.add("LEA.32	r"+Integer.toHexString(i/2)+",[r0+0x" + Integer.toHexString(l)+"]");
 			}
 			if(s[1] != null) {
 				int l = toImm(s[1]);
 				if((l|0x7fff) > 0x7fff)
 					 throw new ParseException("Immediate overload");
-				addInstr("LEA.32	r0,[r0+0x" + Integer.toHexString(l)+"]");
+				microASM.add("LEA.32	r0,[r0+0x" + Integer.toHexString(l)+"]");
 			}
-			addInstr("JMP 0");
+			microASM.add("JMP 0");
 			
 		}
 		else if(command.matches("RET")) {
-			addInstr("JMP 1*r1e+1");
+			microASM.add("JMP 1*r1e+1");
 		}
 		else if(command.matches("NOP")) {
-			addInstr("LEFT	r0,r0,0");
+			microASM.add("LEFT	r0,r0,0");
 		}
 		else if(command.matches("(CLR|INC|DEC|NOT|NEG)")) {
 			sb.append(new HashMap<String, String>(){{
@@ -250,7 +260,7 @@ public class MacroAssemblerParser {
 				put("NOT","0");
 				put("NEG","0");
 			}}.get(command));
-			addInstr(sb);
+			microASM.add(sb.toString());
 		} 
 		else if(command.matches("MOV")) {
 			sb.append("RIGHT\t");
@@ -264,22 +274,13 @@ public class MacroAssemblerParser {
 				sb.append("1*");
 				sb.append(register(s[3]));
 			}
-			addInstr(sb);
+			microASM.add(sb.toString());
 		}
 		else
 			throw new ParseException(" :: TODO: " + command);
 	}
 
-	void addInstr(StringBuilder sb) {
-		addInstr(sb.toString());
-	}
-	void addInstr(String line) {
-		microASM.add(line);
-	}
-	void addData(int i) {
-		microASM.add(".data	0x" + Integer.toHexString(i));
-		
-	}
+
 
 	void address(StringBuilder sb, String[] s, int start) {
 		String disp = null;
@@ -326,10 +327,10 @@ public class MacroAssemblerParser {
 				else throw new ParseException("Unrecognized symbol: " + s[start]);
 				plusSeparator = false;
 			} else {
-				if(current.contentEquals("+")) {
+				if(current.contentEquals("+")) 
 					plusSeparator = true;
-				}
-				else throw new ParseException("Address must contain separators");
+				else 
+					throw new ParseException("Address must contain separators");
 			}
 			current = s[++start];
 		}

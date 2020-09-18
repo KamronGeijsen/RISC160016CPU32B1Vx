@@ -217,7 +217,7 @@ public class Interpreter {
 			throw new IllegalArgumentException("Not implemented yet");
 		default:
 			throw new Error(
-					"Literally impossible. COND is masked to 4 bits, all combinations of switch statement are present");
+					"Impossible. COND is masked to 4 bits, all combinations of switch statement are present");
 		}
 	}
 	private boolean COND(int comp, long result, byte size) {
@@ -242,7 +242,7 @@ public class Interpreter {
 			throw new IllegalArgumentException("Not implemented yet");
 		default:
 			throw new Error(
-					"Literally impossible. OP is masked to 3 bits, all combinations of switch statement are present");
+					"Impossible. OP is masked to 3 bits, all combinations of switch statement are present");
 		}
 		
 	}
