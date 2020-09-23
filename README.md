@@ -4,24 +4,24 @@ Instruction Set Architecture based on 160016 with RISC approach
 ## Contents
 
 <details>
-<summary>Assembler</summary>
+<summary>Assembler</summary> <p>
 * Assembly examples
 * Save binary executables in ELF-format*
 * Macro-assembler (A little more practical for programmer)
 * Micro-instruction between-layer output for debugging (1:1 representation of assembly instruction to binary)
 * Bindump of assembled binary output for debugging
 * Disassembler
-</details>
+ </p> </details>
 
 <details>
-<summary>Interpreter</summary>
+<summary>Interpreter</summary> <p>
 * Emulate instruction-per-instruction runtime
 * Read binary executables in ELF-format
 * Interrupt handler
-</details>
+ </p> </details>
 
 <details>
-<summary>User Interface for program runtime</summary>
+<summary>User Interface for program runtime</summary> <p>
 * Runtime inputs
   * Keyboard input
   * Mouse input*
@@ -36,4 +36,4 @@ Instruction Set Architecture based on 160016 with RISC approach
   * Memory observer (up to 256kb per observer, read/write indicator)
   * Registerfile observer
   * Runtime statistics
-</details>
+ </p> </details>
