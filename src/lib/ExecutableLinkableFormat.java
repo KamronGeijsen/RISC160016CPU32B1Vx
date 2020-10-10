@@ -28,7 +28,7 @@ public class ExecutableLinkableFormat {
 		return absoluteFileBytes;
 	}
 	
-	public static byte[] loadProgramData(File file, Integer rIP) throws IOException {
+	public static byte[] loadProgramData(File file, Integer rIP, Integer memoffs) throws IOException {
 		byte[] absoluteFileBytes = Files.readAllBytes(file.toPath());
 		int len = ByteBuffer.wrap(absoluteFileBytes)
 				.getInt(FileHeader.fileHeader.length + ProgramHeader.p_fileszOffset); // p_filesz
@@ -42,6 +42,7 @@ public class ExecutableLinkableFormat {
 		
 		
 		rIP = ByteBuffer.wrap(fh).getInt(FileHeader.e_entryOffset);  // e_entry
+		memoffs = ByteBuffer.wrap(ph).getInt(ProgramHeader.p_vaddrOffset);  // p_vaddr
 		ByteBuffer.wrap(fh).putInt(FileHeader.e_entryOffset, 0);
 		
 		if(!Arrays.equals(fh, FileHeader.fileHeader))
@@ -95,8 +96,10 @@ public class ExecutableLinkableFormat {
 		int p_filesz;
 		int p_memsz;
 		
+		
 		final static int p_fileszOffset = 20;
 		final static int p_memszOffset = 24;
+		final static int p_vaddrOffset = 8;
 		
 		final static byte[] programHeader = {
 				0x01, 0x00, 0x00, 0x00,	//p_type		Program segment will be loaded
@@ -134,6 +137,7 @@ public class ExecutableLinkableFormat {
 				
 		};
 	}
+
 	
 
 }

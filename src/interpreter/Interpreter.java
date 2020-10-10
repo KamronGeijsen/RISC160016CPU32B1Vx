@@ -2,15 +2,16 @@ package interpreter;
 
 import java.util.Arrays;
 
-import interpreter.GUI.RandomAccessMemoryUnit;
-import interpreter.GUI.SystemAgent;
+import interpreter.SystemAgent.RandomAccessMemoryUnit;
 
 public class Interpreter {
 
-	private final RandomAccessMemoryUnit RAM;
+	final private RandomAccessMemoryUnit RAM;
 	final long[] reg = new long[32];
 	final byte[] regSize = new byte[32];
+	
 	int rIP = 0;
+	boolean interrupted = false;
 
 	Interpreter(RandomAccessMemoryUnit RAM, SystemAgent systemAgent) {
 		this.RAM = RAM;
@@ -20,6 +21,13 @@ public class Interpreter {
 		Arrays.fill(reg, 0);
 		Arrays.fill(regSize, (byte) 0);
 		rIP = 0;
+		interrupted = false;
+	}
+	
+	public void unblock() {
+		interrupted = false;
+		rIP++;
+		reg[0] = 0;
 	}
 
 	public void executeCycle() {

@@ -17,6 +17,7 @@ public class Assembler {
 	final static File macroAssembly = new File(dir, "snake.masm");
 //	final static File macroAssembly = new File(dir, "fibonacci.masm");
 //	final static File macroAssembly = new File(dir, "primes2.masm");
+//	final static File macroAssembly = new File(dir, "os.masm");
 	final static File microAssembly = new File(dir, "o.uasm");
 	final static File binaryText = new File(dir, "o.bin");
 	final static File binaryInstructions = new File(dir, "o.exe");
@@ -41,6 +42,7 @@ public class Assembler {
 				break;
 			case "":
 				if(input == null) input = new File(s);
+				else if(output == null) output = new File(s);
 				else throw new RuntimeException("Invalid flag parameter: " + s);
 				break;
 
@@ -49,10 +51,8 @@ public class Assembler {
 			}
 		}
 		
-		if(input == null)
-			input = macroAssembly;
-		if(output == null)
-			output = binaryInstructions;
+		if(input == null) input = macroAssembly;
+		if(output == null) output = binaryInstructions;
 		
 		
 		if(input.exists())

@@ -1,15 +1,22 @@
-	SYSCALL		3,16,16,20,1,0
+	SYSCALL		3,0x5000,16,16,20,1,0    # grid 16x16 20px 1bit mode0
+	
+	SYSCALL		7,0x6000,0x27    # key pin0x6000 key_left
+	SYSCALL		7,0x6001,0x25    # key pin0x6001 key_right
+	SYSCALL		7,0x6002,0x28    # key pin0x6002 key_down
+	SYSCALL		7,0x6003,0x26    # key pin0x6003 key_up
+	
+	SYSCALL		7,0x6004,0xa    # key pin0x6004 key_enter
 	
 	INIT.int	zero=r0,0
 	INIT.int	sleepMilis=r1,100
 	INIT.nibble	lastkeys,0x0
 	INIT.nibble	keysedge,0
-	INIT.int	end,0x400
+	INIT.int	end,0x100
 	INIT.int	valuestart,0x7000
 	INIT.int	graphicsBase,0x5000
 	INIT.int	keysetBase,0x6000
 	
-8:	SYSCALL		2
+8:	SYSCALL		6,0x6004    # wait pin0x6004
 	
 3:	INIT.int	keystart,0x6800
 	INIT.int	keyend,0x6800
@@ -32,12 +39,10 @@
 	INIT.int	temp, [initSnakeValues]
 	SET temp,[valuestart]
 	SET	len,[valuestart+32]
-	SYSCALL		1, 1000
+	
+	SYSCALL		1, 1000    # wait 100ms
 	$FREE	index,temp
-	JMP 9f
 
-initSnakeValues:
-	$DATA.byte	0b00000001, 0b00000010, 0b00000011, 0b00000100
 
 	
 9:	INIT.nibble	keyset,[keysetBase]
@@ -116,6 +121,8 @@ initSnakeValues:
 	SET	bit1,[graphicsBase+1*index]
 	$FREE	index,value,bit0,bit1
 	
-	SYSCALL		1, 100
+	SYSCALL		1, 100    # wait 100ms
 	JMP 9b
-	
+
+initSnakeValues:
+	$DATA.byte	0b00000001, 0b00000010, 0b00000011, 0b00000100

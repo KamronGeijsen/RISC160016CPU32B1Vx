@@ -1,4 +1,4 @@
-	SYSCALL		3, 16, 16, 20, 8, 3
+	SYSCALL		3, 0x5000, 16, 16, 20, 8, 3
 	
 	$INIT	rLINK=r1e
 	INIT.int	zero=r0,0
