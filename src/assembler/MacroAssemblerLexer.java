@@ -14,8 +14,14 @@ public class MacroAssemblerLexer {
 		return macroParsed;
 	}
 	public ArrayList<String[]> macroAssemblerLexer(Scanner sc) {
-		while(sc.hasNextLine())
-			lexer(sc.nextLine(), macroParsed);
+		String s = "";
+		while(sc.hasNextLine()) try {
+			s = sc.nextLine();
+			lexer(s, macroParsed);
+		} catch (LexException e) {
+			System.err.println(s);
+			e.printStackTrace();
+		}
 		return macroParsed;
 	}
 
@@ -53,7 +59,11 @@ public class MacroAssemblerLexer {
 					break;
 				do
 					command.append(c);
-				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=');
+				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=' || c == '_');
+			} else if (c == '"' || c == '\'') { 
+				if (command.length() > 0)
+					break;
+				else throw new LexException("Invalid command");
 			} else if (c == '#' || c == '-') {
 				break;
 			} else
@@ -94,7 +104,7 @@ public class MacroAssemblerLexer {
 			} else if (Character.isLetterOrDigit(c) || c == '$' || c == '-') {
 				do
 					argument.append(c);
-				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=');
+				while (++i < len && Character.isLetterOrDigit(c = chars[i]) || c == '.' || c == '=' || c == '_');
 				if (separator != 0)
 					separated[index++] = Character.toString(separator);
 				separated[index++] = argument.toString();
@@ -102,12 +112,22 @@ public class MacroAssemblerLexer {
 				argument.setLength(0);
 			} else if (c == '#') {
 				break;
+			}  else if (c == '"') {
+				char last = c;
+				do {
+					argument.append(c);
+					last = c;
+				} while (++i < len && ((c = chars[i]) != '"' || last == '\\'));
+				i++;
+				separated[index++] = argument.toString();
+				separator = 0;
+				argument.setLength(0);
 			} else
 				throw new LexException("Did not recognize argument \'" + c + "\'");
 		}
 		if (separator != 0 && separator != ' ')
 			throw new LexException("Instructions may not end with a separator \'" + separator + "\'");
-		if (command.toString().startsWith("J")) {
+		if (command.toString().toUpperCase().startsWith("J") ) {
 			String labelName = separated[1];
 			if (labelName.matches("[1-9]\\d*[bf]")) {
 				int labelNameN = currentNumberedLabel[labelName.charAt(0) - '0'];

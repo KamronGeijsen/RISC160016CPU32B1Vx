@@ -22,13 +22,13 @@ public class MacroAssemblerParser {
 		ArrayList<String> microASM = new ArrayList<String>();
 		for(String[] s : macroLexed) {
 			if(s.length == 32) {
-
-//				for(int i = 0; i < 32; i++)
-//					if(s[i] == null) {
-//						System.out.println(i);
-//						break;
-//					}
-				parse(s, microASM);
+				try {
+					parse(s, microASM);
+				} catch (ParseException e){
+					System.err.println(String.join(", ", s));
+					throw e;
+				}
+				
 			} else {
 				labelNamesToMicroAddresses.put(s[0], microASM.size());
 			}
@@ -43,10 +43,14 @@ public class MacroAssemblerParser {
 			if (microASM.get(currentAddr).contains(":")) {
 				String[] parts = microASM.get(currentAddr).split(":", 2);
 				Integer addr = labelNamesToMicroAddresses.get(parts[0]);
-				if (addr == null)
+				if (addr == null) {
+					System.out.println(microASM.get(currentAddr));
 					throw new ParseException("Label not found: " + parts[0]);
+				}
 				String name = parts[1];
-				if(name.startsWith("JMP") || name.startsWith("JAL")) 
+				if(name.startsWith(".data"))
+					addr = addr & -1;
+				else if(name.startsWith("JMP") || name.startsWith("JAL")) 
 					addr = addr - currentAddr & 0x7ffffff;
 				else if(name.startsWith("J")) 
 					addr = addr - currentAddr & 0x7f;
@@ -102,17 +106,16 @@ public class MacroAssemblerParser {
 			}
 			
 		}
+
 		else if(command.matches("INIT\\.\\w+")) {
 			if(s[1].contains("=")) {
 				String[] parts = s[1].split("=");
-//				System.out.println(Arrays.toString(parts));
 				allocateRegister(parts[0], parts[1]);
 				s[1]=parts[0];
 			}
 			else allocateRegister(s[1]);
 			boolean get = s[3].contentEquals("[");
 			
-			 
 			
 			sb.append((get ? "GET." : "LEA."));
 			sb.append(sizesMap.get(command.substring(5)));
@@ -121,7 +124,6 @@ public class MacroAssemblerParser {
 			
 			sb.append(',');
 			address(sb, s, get?4:3);
-//			System.out.println(sb);
 			
 			String sbs = sb.toString();
 			if(sbs.contains(":")) {
@@ -135,6 +137,72 @@ public class MacroAssemblerParser {
 			else
 				microASM.add(sbs);
 		}
+		else if(command.matches("\\$CHAR\\.\\w+") || command.matches("\\$ASCIIZ?")) {
+			int size;
+			if(command.charAt(1) == 'A') {
+				size = 8;
+				if(command.length() == "$ASCIIZ".length())
+					s[1]+="\\0";
+			} else {
+				size = sizesMap.get(command.split("\\.")[1]);
+			}
+			
+				
+			int effectiveSize = 0;
+			int tempInt = 0;
+			if(size > 32)
+				throw new ParseException("Larger than int sizes not supported yet");
+			for(int i = 1; i < s[1].length(); i++) {
+				char c = s[1].charAt(i);
+				if (c == '\\') {
+					
+					switch(s[1].charAt(++i)) {
+					case '0': c = 0; break;
+					case 'n': c = '\n'; break;
+					}
+					
+				}
+				tempInt |= ((int)(c) & ((1l << size) - 1)) << effectiveSize;
+				if((effectiveSize += size) == 32) {
+					microASM.add(".data	0x" + Integer.toHexString(tempInt));
+					tempInt = effectiveSize = 0;
+				}
+				
+			}
+			if(effectiveSize != 0) {
+				microASM.add(".data	0x" + Integer.toHexString(tempInt));
+			}
+		}
+		else if(command.matches("\\$LABEL(\\.\\w+)?") || command.matches("\\$ADDR(\\.\\w+)?")) {
+			int size;
+			if(command.contains(".")) {
+				size = sizesMap.get(command.split("\\.")[1]);
+			} else {
+				size = 32;
+			}
+			if(size != 32)
+				throw new ParseException("Larger than int sizes not supported yet");
+			for(int i = 1; s[i] != null; i+=2) {
+				microASM.add(s[i] + ":.data	#");
+			}
+		}
+		else if(command.matches("\\$RES(ERVE)?(\\.\\w+)?") || command.matches("\\$ZERO(\\.\\w+)?")) {
+			int size;
+			if(command.contains(".")) {
+				size = sizesMap.get(command.split("\\.")[1]);
+			} else {
+				size = 1;
+			}
+			if(size > 32)
+				throw new ParseException("Larger than int sizes not supported yet");
+			int totalBitAmount = 0;
+			for(int i = 1; s[i] != null; i+=2) {
+				totalBitAmount += (toImm(s[i])) * size;
+			}
+			for(int i = 0; i < totalBitAmount; i+=32) {
+				microASM.add(".data	0x0");
+			}
+		}
 		else if(command.matches("(SET|GET|LEA(|\\.D|\\.INIT))")) {
 			boolean implicitAddress = command.startsWith("LEA") && !s[3].contentEquals("[");
 			sb.append(command);
@@ -143,7 +211,17 @@ public class MacroAssemblerParser {
 			sb.append(',');
 			address(sb, s, implicitAddress?3:4);
 
-			microASM.add(sb.toString());
+			String sbs = sb.toString();
+			if(sbs.contains(":")) {
+				String[] sbss = sbs.split(":", 2);
+				sb.setLength(0);
+				sb.append(sbss[1]);
+				sb.append(':');
+				sb.append(sbss[0]);
+				microASM.add(sb.toString());
+			}
+			else
+				microASM.add(sbs);
 		}
 		else if(lib_op.contains(command.toUpperCase())) {
 			String src1 = s[5] != null ? s[3] : s[1];
@@ -164,17 +242,89 @@ public class MacroAssemblerParser {
 		}
 		else if(command.startsWith("J")) {
 			if(command.matches("(JMP|JAL)")) {
-				if(s[1].matches("\\-?(0x[0-9A-Fa-f]+|0b[01]+|\\d+)")) {
+				int offs = 0;
+				String si = null;	
+				String label = null;
+				for(int i = 1; i < 32; i+=2) {
+					String arg = s[i];
+					String separator = s[i+1];
+					if(arg.matches("\\-?[\\w#]+")) {
+						if(separator == null || separator.contentEquals("+")) {
+							if(arg.matches("\\-?\\d\\w+")) {
+								offs += toImm(arg);
+							}
+							else  {
+								try {
+									String index = register(arg);
+									if(si == null)
+										si = "1*"+index;
+									else
+										throw new ParseException("Jumpaddress contains too many scaled indexes: " + arg);
+								} catch (ParseException e) {
+									if(label == null)
+										label = arg; 
+									else
+										throw new ParseException("Jumpaddress contains too many labels: " + arg);
+								}
+							}
+							if(separator == null)
+								break;
+						}
+						else if (separator.contentEquals("*")) {
+							String index;
+							Integer scale;
+							String arg2;
+							String separator2;
+							try {
+								index = register(arg);
+								arg2 = s[i+2];
+								separator2 = s[i+3];
+								if(separator2 == null || separator2.contentEquals("+")) {
+									scale = toImm(arg2);
+								} else
+									throw new ParseException("Jumpaddress contains invalid separator: " + separator2);
+								if(si == null)
+									si = scale+"*"+index;
+								else
+									throw new ParseException("Jumpaddress contains too many scaled indexes: " + arg);
+							} catch (ParseException e) {
+								scale = toImm(arg);
+								arg2 = s[i+2];
+								separator2 = s[i+3];
+								if(separator2 == null || separator2.contentEquals("+")) {
+									index = register(arg2);
+								} else
+									throw new ParseException("Jumpaddress contains invalid separator: " + separator2);
+								if(si == null)
+									si = scale+"*"+index;
+							}
+							i+=2;
+							if(separator2 == null)
+								break;
+						}
+						else
+							throw new ParseException("Jumpaddress separator does not exist: " + separator);
+					}else
+						throw new ParseException("Jumpaddress argument invalid: " + separator);
+				}
+				
+				if(label == null) {
 					sb.append(command);
 					sb.append(' ');
-					sb.append(s[1]);
+					if(si != null) {
+						sb.append(si);
+						sb.append('+');
+					}
+					sb.append(offs);
+					
 				}
 				else {
-					sb.append(s[1]);
+					sb.append(label);
 					sb.append(':');
 					sb.append(command);
 					sb.append(" #");
 				}
+				
 			} else {
 				String src1 = s[3];
 				String src2 = s[5];
@@ -217,13 +367,71 @@ public class MacroAssemblerParser {
 			microASM.add(sb.toString());
 		}
 		else if(command.matches("SYSCALL")) {
+			int regNumber = 1;
 			for(int i = 3; s[i] != null; i+=2) {
 				if(!s[i-1].contentEquals(","))
 					throw new ParseException("Invalid arguments");
-				int l = toImm(s[i]);
-				if((l|0x7fff) > 0x7fff)
-					 throw new ParseException("Immediate overload");
-				microASM.add("LEA.32	r"+Integer.toHexString(i/2)+",[r0+0x" + Integer.toHexString(l)+"]");
+//				int l = toImm(s[i]);
+//				if((l|0x7fff) > 0x7fff)
+//					 throw new ParseException("Immediate overload");
+//				microASM.add("LEA.32	r"+Integer.toHexString(i/2)+",[r0+0x" + Integer.toHexString(l)+"]");
+				/*
+				 *  {
+			if(s[1].contains("=")) {
+				String[] parts = s[1].split("=");
+				allocateRegister(parts[0], parts[1]);
+				s[1]=parts[0];
+			}
+			else allocateRegister(s[1]);
+			boolean get = s[3].contentEquals("[");
+			
+			
+			sb.append((get ? "GET." : "LEA."));
+			sb.append(sizesMap.get(command.substring(5)));
+			sb.append('\t');
+			sb.append(register(s[1]));
+			
+			sb.append(',');
+			address(sb, s, get?4:3);
+			
+			String sbs = sb.toString();
+			if(sbs.contains(":")) {
+				String[] sbss = sbs.split(":", 2);
+				sb.setLength(0);
+				sb.append(sbss[1]);
+				sb.append(':');
+				sb.append(sbss[0]);
+				microASM.add(sb.toString());
+			}
+			else
+				microASM.add(sbs);
+		}
+				 */
+				if(s[i].contentEquals("[")) {
+					sb.append("GET.32	r"+Integer.toHexString(regNumber)+",");
+					address(sb, s, i+1);
+				} else {
+					sb.append("LEA.32	r"+Integer.toHexString(regNumber)+",");
+					address(sb, s, i);
+					
+				}
+				while (s[i] != null && !s[i].contentEquals(","))
+					i++;
+				i--;
+
+				String sbs = sb.toString();
+				if(sbs.contains(":")) {
+					String[] sbss = sbs.split(":", 2);
+					sb.setLength(0);
+					sb.append(sbss[1]);
+					sb.append(':');
+					sb.append(sbss[0]);
+					microASM.add(sb.toString());
+				}
+				else
+					microASM.add(sbs);
+				sb.setLength(0);
+				regNumber++;
 			}
 			if(s[1] != null) {
 				int l = toImm(s[1]);

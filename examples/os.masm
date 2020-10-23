@@ -1,0 +1,237 @@
+	SYSCALL		3, 0x5000, 32, 16, 20, 8, 3
+	SYSCALL		8, 0x6000, keyQueueIndex, 0x400, 2, keyQueueReady
+	
+	$INIT		rLINK=r1e
+	INIT.int	zero=r0,0
+	
+	
+initialize:
+	init.int 	r1, 0x5000
+	init.int 	r2, initText
+	init.byte 	r3, [r2]
+1:	set 		r3, [r1]
+	add			r2, 8
+	add 		r1, 8
+	get			r3, [r2]
+	jnz 1b		r3
+	
+	init.int	r1, 2
+	set			r1, [cursorX]
+	set			r1, [cursorY]
+	
+newLine:
+	init.int	r1, 0x5000
+	init.int	r2, [cursorY]
+	lea			r2, 8*r2
+	lea			r1, r1+32*r2
+	
+	init.int 	r2, currentDirectory
+	init.byte 	r3, [r2]
+1:	set 		r3, [r1]
+	add			r2, 8
+	add 		r1, 8
+	get			r3, [r2]
+	jnz 1b		r3
+	
+	shr			r1, 3
+	and			r1, 0x1f
+	set			r1, [cursorX] 
+	
+	
+keyWait:
+	init.int	r1, 0x5000
+	init.int	r2, [cursorY]
+	lea			r2, 32*r2
+	lea			r1, r1+8*r2
+	init.int	r2, [cursorX]
+	lea			r1, r1+8*r2
+	init.int	r2, terminal_command_buffer
+	
+1:	init.byte 	r3, [cursorChar]
+	set 		r3, [r1]
+	init.int	r3, r1
+	init.int	r4, r2
+	SYSCALL		6, keyQueueReady    # wait pinKeyQueueReady
+	init.int	r2, r4
+	init.int	r1, r3
+	
+	init.bit	r3, 0
+	set			r3, [keyQueueReady]
+	init.int	r5, [keyQueueIndex]
+	init.int	r4, [keyQueueReadIndex]
+	je 1b cmp	r4, r5
+3:	init.byte	r3, [r4+0x6000]
+	add			r4, 8
+	jge 2f cmp	r4, 256
+	mov			r4, 0
+2:	set			r4, [keyQueueReadIndex]
+	je 3f cmp	r3, 0x0a    # VK_ENTER
+	set 		r3, [r1]
+	set 		r3, [r2]
+	add			r1, 8
+	add			r2, 8
+	je 1b cmp	r4, r5
+	jmp 3b
+3:	init.byte	r3, 0
+	set 		r3, [r1]
+	set 		r3, [r2]
+	set 		r3, [r2+8]
+	set 		r3, [r2+16]
+	set 		r3, [r2+24]
+	
+	init.int	r2, 0x5000
+	sub			r1, r2
+	shr			r1, 3
+	SYSCALL		4, r1
+	init.int	r2, r1+32
+	shr			r2, 5
+	and			r1, 0x1f
+	set			r1, [cursorX]
+	set			r2, [cursorY]
+	
+
+#  Parameters:
+# r1=*char str
+terminal_commands_execute:
+	SYSCALL 5, print_debug_executing_command
+	SYSCALL 5, terminal_command_buffer
+	
+	init.int	r1, terminal_commands_lookuptable
+1:	init.int	r5, r1
+	init.int	r3, [r5]
+	jz 4f		r3
+	add			r1, 32
+	init.int	r2, terminal_command_buffer
+2:	init.int	r3, [r1]
+	init.int	r4, [r2]
+	jne 3f cmp	r3, r4
+	init.byte	r3, [r1+24]
+	add			r1, 32
+	add			r2, 32
+	jnz 2b		r3
+	init.int	r5, [r5]
+	jmp 32*r5
+3:	init.byte	r3, [r1+24]
+	add			r1, 32
+	jnz 3b		r3
+	jmp 1b
+4:	jmp terminal_command_invalid
+	
+	
+terminal_command_ls:
+	SYSCALL 4, 1
+	SYSCALL 5, print_debug_executing_command_ls
+	init.int	r1, print_debug_executing_command_ls
+	jal terminal_newline_println_string
+	jmp newLine
+terminal_command_mkdir:
+	SYSCALL 4, 2
+	SYSCALL 5, print_debug_executing_command_mkdir
+	init.int	r1, print_debug_executing_command_mkdir
+	jal terminal_newline_println_string
+	jmp newLine
+terminal_command_rmdir:
+	SYSCALL 4, 3
+	SYSCALL 5, print_debug_executing_command_rmdir
+	init.int	r1, print_debug_executing_command_rmdir
+	jal terminal_newline_println_string
+	jmp newLine
+terminal_command_exit:
+	SYSCALL 4, 4
+	SYSCALL 5, print_debug_executing_command_exit
+	init.int	r1, print_debug_executing_command_exit
+	jal terminal_newline_println_string
+	SYSCALL 0
+terminal_command_invalid:
+	SYSCALL 4, 5
+	SYSCALL 5, print_debug_executing_command_invalid
+	init.int	r1, print_debug_executing_command_invalid
+	jal terminal_newline_println_string
+	
+	jmp newLine
+	
+terminal_newline_println_string:
+	init.int	r3, r1
+	init.int	r1, 0x5000
+	init.int	r2, [cursorY]
+	lea			r2, 8*r2
+	lea			r1, r1+32*r2
+	
+	init.int 	r2, r3
+	init.byte 	r3, [r2]
+1:	set 		r3, [r1]
+	add			r2, 8
+	add 		r1, 8
+	get			r3, [r2]
+	jnz 1b		r3
+	
+	init.int	r2, 0x5000
+	sub			r1, r2
+	shr			r1, 3
+	SYSCALL		4, r1
+	init.int	r2, r1+32
+	shr			r2, 5
+	and			r1, 0x1f
+	set			r1, [cursorX]
+	set			r2, [cursorY]
+	ret
+	
+# r1=*char src, r2=*char dst
+c_strcpy:
+	init.byte 	r3, [r1]
+1:	set 		r3, [r2]
+	add			r2, 8
+	add 		r1, 8
+	get			r3, [r1]
+	jnz 1b		r3
+	ret
+	
+fini:
+	INIT.int	r0,0
+	SYSCALL
+cursorX: $data.int 2
+cursorY: $data.int 2
+windowWidth: $data.int 32
+windowHeight: $data.int 16
+
+
+terminal_commands_lookuptable:
+	$label terminal_command_ls
+	$asciiz "ls"
+	$label terminal_command_mkdir
+	$asciiz "mkdir"
+	$label terminal_command_rmdir
+	$asciiz "rmdir"
+	$label terminal_command_exit
+	$asciiz "exit"
+	$data.int 0
+
+print_debug_executing_command_ls:
+	$asciiz "List all files in directory"
+print_debug_executing_command_mkdir:
+	$asciiz "Making a directory"
+print_debug_executing_command_rmdir:
+	$asciiz "Remove a directory"
+print_debug_executing_command_exit:
+	$asciiz "Exiting program"
+print_debug_executing_command_invalid:
+	$asciiz "Invalid command"
+	
+print_debug_executing_command:
+	$asciiz "Executing command: "
+currentDirectory:
+	$asciiz "root/: "
+startChar:
+	$asciiz "> "
+cursorChar:
+	$ascii "_"
+initText:
+	$asciiz "RISC160016CPU32B1Vx mock OS"
+keyQueueReadIndex:
+	$data.int 0
+keyQueueIndex:
+	$data.int 0
+keyQueueReady:
+	$data.int 0
+terminal_command_buffer:
+	$res.8 64

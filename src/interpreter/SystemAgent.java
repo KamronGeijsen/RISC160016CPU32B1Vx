@@ -45,7 +45,7 @@ public class SystemAgent {
 			int[] arr = new int[intBuf.remaining()];
 			intBuf.get(arr);
 			
-			DirectMemoryAccessBuffer programLoadBuffer = new DirectMemoryAccessBuffer(RAM, 0, 0, arr.length*32, (byte) 32);
+			DirectMemoryAccessBufferWriter programLoadBuffer = new DirectMemoryAccessBufferWriter(RAM, 0, 0, arr.length*32, (byte) 32);
 			programLoadBuffer.putAligned(arr);
 			
 		} catch (IOException e) {
@@ -63,11 +63,11 @@ public class SystemAgent {
 		keyHandlers.add(this::standardKeysHandler);
 	}
 
+	final static int DEFAULT_RAM_SIZE = 65536; // Bits
+	
 	final File programFile;
 	final GUI gui;
 	final TimerUnit timerUnit;
-	
-	final static int DEFAULT_RAM_SIZE = 65536; // Bits
 	final RandomAccessMemoryUnit RAM;
 	final Interpreter interpreter;
 	final Disassembler disassembler;
@@ -77,6 +77,14 @@ public class SystemAgent {
 	final ArrayList<PinHandler> pinHandlers = new ArrayList<>();
 	
 	final ArrayList<Pin> pins = new ArrayList<>();
+	public Pin pinAtOrNew(int address) {
+		for(Pin p : pins)
+			if(p.address == address)
+				return p;
+		Pin p = new Pin(address);
+		pins.add(p);
+		return p;
+	}
 	
 	boolean paused = true;
 	
@@ -115,12 +123,12 @@ public class SystemAgent {
 	private boolean interruptHandler() {
 		long code = interpreter.reg[0];
 		switch ((int)code) {
-		case 0: {
+		case 0: { // Exit (successful)
 			System.out.println("===Done executing successfully===");
 			paused = true;
 			return true;
 		}
-		case 1: {
+		case 1: { // Wait for milis
 			int sleepMilis = (int) interpreter.reg[1];
 			long fireTime = timerUnit.getMilis() + sleepMilis;
 			TimerHandler timerHandler = (t) -> {
@@ -137,7 +145,7 @@ public class SystemAgent {
 			
 			return true;
 		}
-		case 3: {
+		case 3: { // Create GridObserver
 			for(GUIPane pane : gui.panes)
 				if(pane instanceof GridObserver)
 					throw new RuntimeException("gridObserver already initialized");
@@ -150,36 +158,40 @@ public class SystemAgent {
 			interpreter.unblock();
 			return false;
 		}
-		case 4: {
+		case 4: { // Print number
 			System.out.println("> " + interpreter.reg[1]);
 			interpreter.unblock();
 			return false;
 		}
-		case 5: { // ?
+		case 5: { // Print string
+			int address = (int) interpreter.reg[1];
+			System.out.println(address + "\t" + RAM.GET(address, (byte)8));
+			System.out.print("> ");
+			for(char c; (c=(char) RAM.GET(address, (byte)8)) != 0; address+=8)
+				System.out.print(c);
+			System.out.println();
 			
 			interpreter.unblock();
 			return false;
 		}
 		case 6: { //Wait for Pin event
-			for(Pin pin : pins) {
-				if(pin.address == interpreter.reg[1]) {
-					
-					pinHandlers.add(p -> {
-						long memPin = RAM.GET(pin.address, (byte)1);
-						if(memPin != (pin.isOn?1:0)) {
-							pin.isOn = memPin!=0;
-							if(pin.isOn) {
-								interpreter.unblock();
-								pinHandlers.remove(p);
-							}
-						}
-					});
+			int address = (int)interpreter.reg[1];
+			Pin pin = pinAtOrNew(address);
+			pinHandlers.add(p -> {
+				long memPin = RAM.GET(pin.address, (byte)1);
+				if(memPin != 0) {
+					//memPin != (pin.isOn?1:0)
+					pin.isOn = memPin!=0;
+					if(pin.isOn) {
+						System.out.println("Unblock me");
+						interpreter.unblock();
+						pinHandlers.remove(p);
+					}
 				}
-			}
-			
+			});
 			return true;
 		}
-		case 7: { //Keyboard pin
+		case 7: { //Create Keyboard pin
 			int address = (int)interpreter.reg[1];
 			int keyCode = (int)interpreter.reg[2];
 			keyHandlers.add(e -> {
@@ -191,8 +203,48 @@ public class SystemAgent {
 			interpreter.unblock();
 			return false;
 		}
+		case 8: { // Keyboard key queue
+			int baseAddress = (int)interpreter.reg[1];
+			int indexAddress = (int)interpreter.reg[2];
+			int length = (int)interpreter.reg[3];
+			int mode = (int)interpreter.reg[4];
+			int pinAddress = (int)interpreter.reg[5];
+			System.out.println(pinAddress);
+			
+			DirectMemoryAccessRingBufferWriter keyQueue = new DirectMemoryAccessRingBufferWriter(RAM, baseAddress, indexAddress, length, (byte)8);
+			KeyHandler[] modes = {
+					e -> {
+						if((e.getKeyChar() & ~0x7f) == 0) 
+							keyQueue.put(e.getKeyChar() | (e.getID()==KeyEvent.KEY_PRESSED?0x80:0));
+					},
+					e -> {
+						if((e.getKeyChar() & ~0x7f) == 0) 
+							keyQueue.put(e.getKeyChar() | (e.getID()==KeyEvent.KEY_PRESSED?0x80:0));
+					},
+					e -> {
+						if((e.getKeyChar() & ~0x7f) == 0 && e.getID()==KeyEvent.KEY_PRESSED && !(e.getKeyCode() == KeyEvent.VK_SPACE && paused)) {
+							keyQueue.put(e.getKeyChar());
+						}
+					},
+			};
+			if(mode == 2) {
+				keyQueue.addPinHandler((p) -> {
+					RAM.SET(pinAddress, (byte)1, 1);
+					System.out.println("new key!");
+				});
+			}
+			
+			
+			keyHandlers.add(modes[mode]);
+			
+			interpreter.unblock();
+			return false;
+		}
+		case 9: { // 
+			
+		}
 		
-		case -1: {
+		case -1: { // Force exit with default error code
 			System.out.println("===Exited with error===");
 			paused = true;
 			return true;
@@ -246,7 +298,7 @@ public class SystemAgent {
 		final int[] data;
 		
 		RandomAccessMemoryUnit() {
-			data = new int[SystemAgent.DEFAULT_RAM_SIZE/32];
+			this(SystemAgent.DEFAULT_RAM_SIZE);
 		}
 		RandomAccessMemoryUnit(int bits) {
 			data = new int[bits/32];
@@ -313,8 +365,9 @@ public class SystemAgent {
 				data[intAlligned+1] = (int) (old >>> 32);
 		}
 	}	
-	class DirectMemoryAccessBuffer {
-		public DirectMemoryAccessBuffer(RandomAccessMemoryUnit ram, int baseAddress, int indexAddress, int length, byte size){
+	
+	class DirectMemoryAccessBufferWriter {
+		public DirectMemoryAccessBufferWriter(RandomAccessMemoryUnit ram, int baseAddress, int indexAddress, int length, byte size){
 			this.ram = ram;
 			this.baseAddress = baseAddress;
 			this.indexAddress = indexAddress;
@@ -326,6 +379,12 @@ public class SystemAgent {
 		final int indexAddress;
 		final int length;
 		final byte size;
+		final ArrayList<PinHandler> readyPins = new ArrayList<>();
+		
+		void addPinHandler(PinHandler... pins) {
+			for(PinHandler p : pins)
+				readyPins.add(p);
+		}
 		
 		void put(long value) {
 			int index = indexAddress==0?0:(int) ram.GET(indexAddress, (byte) 32);
@@ -335,6 +394,8 @@ public class SystemAgent {
 				throw new ArrayIndexOutOfBoundsException("DirectMemoryAccessBuffer out of bounds");
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 		void put(long... values) {
 			int index = indexAddress==0?0:(int) ram.GET(indexAddress, (byte) 32);
@@ -346,24 +407,33 @@ public class SystemAgent {
 				throw new ArrayIndexOutOfBoundsException("DirectMemoryAccessBuffer out of bounds");
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 		void putAligned(int... alignedValues) {
 			int len = alignedValues.length;
 			int index = indexAddress==0?0:(int) ram.GET(indexAddress, (byte) 32);
 			int newIndex = index + len*32;
 			if(newIndex <= length) {
-				System.arraycopy(alignedValues, 0, ram.data, baseAddress+index, len);
+				System.arraycopy(alignedValues, 0, ram.data, (baseAddress+index)/32, len);
 				index = newIndex;
 			} else
 				throw new ArrayIndexOutOfBoundsException("DirectMemoryAccessBuffer out of bounds");
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 	}
-	class DirectMemoryAccessRingBuffer extends DirectMemoryAccessBuffer{
+	class DirectMemoryAccessRingBufferWriter extends DirectMemoryAccessBufferWriter{
 		
-		public DirectMemoryAccessRingBuffer(RandomAccessMemoryUnit ram, int baseAddress, int indexAddress, int length, byte size) {
+		public DirectMemoryAccessRingBufferWriter(RandomAccessMemoryUnit ram, int baseAddress, int indexAddress, int length, byte size) {
 			super(ram, baseAddress, indexAddress, length, size);
+		}
+		
+		void addPinHandler(PinHandler... pins) {
+			for(PinHandler p : pins)
+				readyPins.add(p);
 		}
 		
 		void put(long value) {
@@ -374,6 +444,8 @@ public class SystemAgent {
 				index = 0;
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 		void put(long... values) {
 			int index = indexAddress==0?0:(int) ram.GET(indexAddress, (byte) 32);
@@ -385,6 +457,8 @@ public class SystemAgent {
 			}
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 		void putAligned(int... alignedValues) {
 			int len = alignedValues.length;
@@ -401,6 +475,8 @@ public class SystemAgent {
 			}
 			if(indexAddress!=0)
 				ram.SET(indexAddress, size, index);
+			if(readyPins.size() > 0)
+				new ArrayList<>(readyPins).forEach(p -> p.handle(p));
 		}
 	}
 	

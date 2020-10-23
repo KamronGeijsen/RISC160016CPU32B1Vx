@@ -14,8 +14,14 @@ public class MicroAssembler {
 	
 	int[] assemble(ArrayList<String> microAssembly) {
 		int[] binaryInstructions = new int[microAssembly.size()];
-		for(int i = 0; i < binaryInstructions.length; i++)
-			binaryInstructions[i] = parse(microAssembly.get(i));
+		for(int i = 0; i < binaryInstructions.length; i++) {
+			try {
+				binaryInstructions[i] = parse(microAssembly.get(i));
+			} catch (RuntimeException e) {
+				System.err.println(microAssembly.get(i));
+				e.printStackTrace();
+			}
+		}
 		return binaryInstructions;
 	}
 	
@@ -65,7 +71,7 @@ public class MicroAssembler {
 				if (parse[1].contains("*")) {
 					String[] parse2 = parse[1].split("\\+");
 					String[] parse3 = parse2[0].split("\\*");
-					SIO = (toImm(parse2[1]) << 8) | (sizesMap.get(parse3[0])) | (toReg(parse3[1]));
+					SIO = (toImm(parse2[1]) << 8) | (sizesMap.get(parse3[0]) << 5) | (toReg(parse3[1]));
 				} else {
 					SIO = toImm(parse[1]);
 				}

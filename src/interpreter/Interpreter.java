@@ -35,6 +35,10 @@ public class Interpreter {
 	}
 
 	public void executeInstr(final long instr) {
+		if (instr == 0) {
+			interrupted = true;
+			return;
+		}
 		final int MOP = (int) ((instr >> 26) & 0xf);
 
 		final int LibOp_CondOp = (int) ((instr >> 8) & 0xff);
