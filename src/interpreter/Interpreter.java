@@ -2,19 +2,17 @@ package interpreter;
 
 import java.util.Arrays;
 
-import interpreter.SystemAgent.RandomAccessMemoryUnit;
-
 public class Interpreter {
 
-	final private RandomAccessMemoryUnit RAM;
+	final private NorthBridge northBridge;
 	final long[] reg = new long[32];
 	final byte[] regSize = new byte[32];
 	
 	int rIP = 0;
 	boolean interrupted = false;
 
-	Interpreter(RandomAccessMemoryUnit RAM, SystemAgent systemAgent) {
-		this.RAM = RAM;
+	Interpreter(NorthBridge northBridge) {
+		this.northBridge = northBridge;
 	}
 
 	public void initialize() {
@@ -31,7 +29,7 @@ public class Interpreter {
 	}
 
 	public void executeCycle() {
-		executeInstr(RAM.loadInstr(rIP));
+		executeInstr(northBridge.loadInstr(rIP));
 	}
 
 	public void executeInstr(final long instr) {
@@ -84,10 +82,10 @@ public class Interpreter {
 				break;
 
 			case 8: // SET
-				RAM.SET((int) (reg[rSRC] + SID), regSize[rDEST], reg[rDEST]);
+				northBridge.SET((int) (reg[rSRC] + SID), regSize[rDEST], reg[rDEST]);
 				break;
 			case 9: // GET
-				reg[rDEST] = RAM.GET((int) (reg[rSRC] + SID), regSize[rDEST]);
+				reg[rDEST] = northBridge.GET((int) (reg[rSRC] + SID), regSize[rDEST]);
 				break;
 
 			case 10:// LEA
@@ -125,7 +123,7 @@ public class Interpreter {
 			if ((instr & 0x04000000) == 0) { // LEA.size
 				reg[rDEST] = maskLowestNBits(reg[rSRC] + SID, regSize[rDEST]);
 			} else { // GET.size
-				reg[rDEST] = RAM.GET((int) (reg[rSRC] + SID), regSize[rDEST]);
+				reg[rDEST] = northBridge.GET((int) (reg[rSRC] + SID), regSize[rDEST]);
 			}
 		}
 		

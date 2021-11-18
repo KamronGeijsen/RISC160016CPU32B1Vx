@@ -8,12 +8,12 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.util.ArrayList;
 
 import javax.swing.JFrame;
 
-import interpreter.SystemAgent.RandomAccessMemoryUnit;
+import assembler.Disassembler;
+import interpreter.NorthBridge.RandomAccessMemoryUnit;
 
 /**
  * @author Kamron Geijsen
@@ -21,23 +21,23 @@ import interpreter.SystemAgent.RandomAccessMemoryUnit;
  */
 public class GUI extends JFrame{
 
-	private static final File defaultFile = new File("examples/o.exe");
+	
 	private static final long serialVersionUID = 0;
 	
 	
-	final SystemAgent systemAgent;
-	final Debugger debugger;
+	final NorthBridge northBridge;
+	final Disassembler disassembler = new Disassembler();
 	
 	final ArrayList<GUIPane> panes = new ArrayList<GUIPane>();
-	final ArrayList<GUIPane> defaultPanes = new ArrayList<GUIPane>();
 
 	final double targetFPS = 60.0;
 	
 	int width, height;
 	
 	
-	GUI(File file) {
-//		ka.keyToAddress.add(ka.onlyArrows);
+	public GUI(NorthBridge northBridge) {
+		
+		this.northBridge = northBridge;
 		addComponentListener(new ComponentAdapter() {
 			public void componentResized(ComponentEvent e) {
 				width = getWidth();
@@ -47,23 +47,11 @@ public class GUI extends JFrame{
 		setSize(1000, 1000);
 		setTitle("160016CPU32B1Vx Interpreter");
 		
-		debugger = new Debugger(600, 700);
+		
 		addKeyListener(new KA());
-		systemAgent = new SystemAgent(file, this, new TimerUnit());
-		MemoryObserver memoryObserver = new MemoryObserver(systemAgent.RAM, 50, 50, 256, 256, 2);
-		RegObserver regObserver = new RegObserver(systemAgent.interpreter.reg, systemAgent.interpreter.regSize, 600, 50, 16);
 		
-		defaultPanes.add(memoryObserver);
-		defaultPanes.add(regObserver);
-		defaultPanes.add(debugger);
-		defaultPanes.trimToSize();
-		
-		panes.addAll(defaultPanes);
-		panes.removeIf(p -> p==null);
-
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		setVisible(true);
-		
 	}
 	@Override
 	public void paint(Graphics screen) {
@@ -72,7 +60,6 @@ public class GUI extends JFrame{
 		Graphics g = bf.createGraphics();
 		
 		
-		systemAgent.timedExecuteHandler(20);
 		for(GUIPane pane : panes) 
 			pane.draw(g);
 		screen.drawImage(bf, 0, 0, width, height, this);
@@ -92,12 +79,12 @@ public class GUI extends JFrame{
 	class KA extends KeyAdapter {
 		@Override
 		public void keyPressed(KeyEvent e) {
-			System.out.println("h:" + Integer.toHexString(e.getKeyCode()) + "	d:" + e.getKeyCode() + "	c:" + e.getKeyChar() + "	cd:" + (int)e.getKeyChar());
-			new ArrayList<>(systemAgent.keyHandlers).forEach((handler) -> handler.handle(e));
+//			System.out.println("h:" + Integer.toHexString(e.getKeyCode()) + "	d:" + e.getKeyCode() + "	c:" + e.getKeyChar() + "	cd:" + (int)e.getKeyChar());
+//			new ArrayList<>(systemAgent.keyHandlers).forEach((handler) -> handler.handle(e));
 		}
 		@Override
 		public void keyReleased(KeyEvent e) {
-			new ArrayList<>(systemAgent.keyHandlers).forEach((handler) -> handler.handle(e));
+//			new ArrayList<>(systemAgent.keyHandlers).forEach((handler) -> handler.handle(e));
 		}
 	}
 	class TimerUnit {
@@ -111,12 +98,14 @@ public class GUI extends JFrame{
 	
 	class Debugger extends GUIPane {
 		
-		Debugger(int x, int y){
+		Debugger(int x, int y, Interpreter interpreter, RandomAccessMemoryUnit ram){
 			super.drawX = x;
 			super.drawY = y;
 			super.drawW = 250;
 			super.drawH = 100;
 			super.title = "Debug";
+			this.interpreter = interpreter;
+			this.ram = ram;
 		}
 		
 		long lastSecond;
@@ -134,6 +123,9 @@ public class GUI extends JFrame{
 		int lastSize;
 		boolean lastSet;
 		boolean active;
+		
+		Interpreter interpreter;
+		RandomAccessMemoryUnit ram;
 		
 		@Override
 		void draw(Graphics g) {
@@ -230,13 +222,13 @@ public class GUI extends JFrame{
 			
 			g.drawImage(bf, drawX, drawY, null);
 			
-			for(int mem = 0; mem < debugger.lastSize; mem++) {
-				int addr = debugger.lastAccess+mem;
-				g.setColor(RAM.GET(addr, (byte) 1) == 1?(debugger.lastSet?Color.RED:Color.GREEN):Color.DARK_GRAY);
+			for(int mem = 0; mem < northBridge.debugger.lastSize; mem++) {
+				int addr = northBridge.debugger.lastAccess+mem;
+				g.setColor(RAM.GET(addr, (byte) 1) == 1?(northBridge.debugger.lastSet?Color.RED:Color.GREEN):Color.DARK_GRAY);
 				g.fillRect(this.drawX+(addr&0xff)*tile, this.drawY+((addr>>8)&0xff)*tile, tile, tile);
 			}
 			for(int mem = 0; mem < 32; mem++) {
-				int addr = systemAgent.interpreter.rIP*32+mem;
+				int addr = northBridge.debugger.interpreter.rIP*32+mem;
 				g.setColor(RAM.GET(addr, (byte) 1) == 1?Color.CYAN:Color.DARK_GRAY);
 				g.fillRect(this.drawX+(addr&0xff)*tile, this.drawY+((addr>>8)&0xff)*tile, tile, tile);
 			}
@@ -246,7 +238,7 @@ public class GUI extends JFrame{
 		}
 	}
 	class RegObserver extends GUIPane {
-		public RegObserver(long[] reg, byte[] regSize, int drawX, int drawY, int size) {
+		public RegObserver(Interpreter interpreter, int drawX, int drawY, int size) {
 			tileX = size/2+2;
 			tileY = size;
 			f = new Font(Font.MONOSPACED, Font.BOLD, size);
@@ -255,12 +247,14 @@ public class GUI extends JFrame{
 			super.drawW = tileX*37;
 			super.drawH = tileY*32;
 			super.title = "Registers";
-			this.pointerTo_reg = reg;
-			this.pointerTo_regSize = regSize;
+			this.interpreter = interpreter;
+//			this.pointerTo_reg = reg;
+//			this.pointerTo_regSize = regSize;
 		}
 		
-		final long[] pointerTo_reg; 
-		final byte[] pointerTo_regSize;
+//		final long[] pointerTo_reg; 
+//		final byte[] pointerTo_regSize;
+		final Interpreter interpreter;
 		
 		final Font f;
 		final int tileX, tileY;
@@ -270,10 +264,10 @@ public class GUI extends JFrame{
 			g.setColor(Color.WHITE);
 			g.setFont(f);
 			for(int y = 0; y < 32; y++) {
-				byte size = pointerTo_regSize[y];
+				byte size = interpreter.regSize[y];
 				for(int x = 0; x < 32; x++) {
 					g.setColor(x<(size)?Color.WHITE:Color.LIGHT_GRAY);
-					String s = (pointerTo_reg[y]&(1<<x))!=0?"1":"0";
+					String s = (interpreter.reg[y]&(1<<x))!=0?"1":"0";
 					g.drawString(s, drawX+(31-x)*tileX+1, drawY+y*tileY+tileY-2);
 				}
 				g.setColor(Color.WHITE);
@@ -285,20 +279,19 @@ public class GUI extends JFrame{
 			
 			for(int x = 0; x < 32; x++) {
 				g.setColor(x>=5?Color.WHITE:Color.LIGHT_GRAY);
-				String s = ((systemAgent.interpreter.rIP<<5)&(1<<x))!=0?"1":"0";
+				String s = ((interpreter.rIP<<5)&(1<<x))!=0?"1":"0";
 				g.drawString(s, this.drawX+(31-x)*tileX+1, this.drawY+tileY*33+tileY-2);
 			}
 			g.setColor(Color.WHITE);
 			g.drawString("rIP", this.drawX+33*tileX, this.drawY+33*tileY+tileY-2);
 			for(int x = 0; x < 32; x++) {
-				String s = (systemAgent.RAM.data[systemAgent.interpreter.rIP]&(1<<x))!=0?"1":"0";
+				String s = (northBridge.debugger.ram.data[interpreter.rIP]&(1<<x))!=0?"1":"0";
 				g.drawString(s, this.drawX+(31-x)*tileX+1, this.drawY+tileY*34+tileY-2);
 			}
 			g.setColor(Color.WHITE);
 			g.drawString("rIR", this.drawX+33*tileX, this.drawY+34*tileY+tileY-2);
-			String s = systemAgent.disassembleCurrentInstruction().replaceAll("\t", "  ");
+			String s = disassembler.disassemble(northBridge.debugger.ram.data[interpreter.rIP]).replaceAll("\t", "  ");
 			g.drawString(s, this.drawX+2*tileX+1, this.drawY+35*tileY+tileY-2);
-			
 			g.drawRect(this.drawX, this.drawY+tileY*32, tileX*37, tileY*4);
 			super.drawPaneTitle(g);
 		}
@@ -372,13 +365,13 @@ public class GUI extends JFrame{
 		}
 	}
 	
-	public static void main(String[] args) {
-		File file = defaultFile;
-		if(args != null && args.length == 1 && args[0] != null)
-			file = new File(args[0]);
-//		calc();
-//		System.exit(0);
-		new GUI(file);
-	}
+//	public static void main(String[] args) {
+//		File file = defaultFile;
+//		if(args != null && args.length == 1 && args[0] != null)
+//			file = new File(args[0]);
+////		calc();
+////		System.exit(0);
+//		new GUI();
+//	}
 	
 }

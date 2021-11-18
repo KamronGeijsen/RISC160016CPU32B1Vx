@@ -8,7 +8,7 @@ import java.util.Arrays;
 
 public class ExecutableLinkableFormat {
 	
-	public static byte[] saveToFile(int[] programData, File file) throws IOException {
+	public static byte[] saveToFile(int[] programData) throws IOException {
 		ByteBuffer dest = ByteBuffer.allocate(programData.length * 4);
 		dest.asIntBuffer().put(programData);
 
@@ -30,6 +30,9 @@ public class ExecutableLinkableFormat {
 	
 	public static byte[] loadProgramData(File file, Integer rIP, Integer memoffs) throws IOException {
 		byte[] absoluteFileBytes = Files.readAllBytes(file.toPath());
+		return loadProgramData(absoluteFileBytes, rIP, memoffs);
+	}
+	public static byte[] loadProgramData(byte[] absoluteFileBytes, Integer rIP, Integer memoffs) throws IOException {
 		int len = ByteBuffer.wrap(absoluteFileBytes)
 				.getInt(FileHeader.fileHeader.length + ProgramHeader.p_fileszOffset); // p_filesz
 		byte[] fh = new byte[FileHeader.fileHeader.length];

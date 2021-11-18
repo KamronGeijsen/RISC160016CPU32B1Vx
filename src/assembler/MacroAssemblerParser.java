@@ -3,6 +3,7 @@ package assembler;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Scanner;
@@ -106,24 +107,31 @@ public class MacroAssemblerParser {
 			}
 			
 		}
+		else if(command.contentEquals(".DATA")) {
+			microASM.add(".data	0x" + Integer.toHexString(toImm(s[1])));
+		}
 
-		else if(command.matches("INIT\\.\\w+")) {
+		else if(command.matches("INIT\\.\\w+|(LEA|GET)\\.\\w+")) {
 			if(s[1].contains("=")) {
 				String[] parts = s[1].split("=");
 				allocateRegister(parts[0], parts[1]);
 				s[1]=parts[0];
 			}
 			else allocateRegister(s[1]);
-			boolean get = s[3].contentEquals("[");
-			
-			
-			sb.append((get ? "GET." : "LEA."));
-			sb.append(sizesMap.get(command.substring(5)));
+			boolean bracket = s[3].contentEquals("[");
+			if(command.charAt(0) == 'I') {
+				sb.append(bracket ? "GET." : "LEA.");
+				sb.append(sizesMap.get(command.substring(5)));
+			}
+			else {
+				sb.append(command.charAt(0) == 'L'?"LEA.":"GET.");
+				sb.append(sizesMap.get(command.substring(4)));
+			}
 			sb.append('\t');
 			sb.append(register(s[1]));
 			
 			sb.append(',');
-			address(sb, s, get?4:3);
+			address(sb, s, bracket?4:3);
 			
 			String sbs = sb.toString();
 			if(sbs.contains(":")) {
@@ -224,19 +232,46 @@ public class MacroAssemblerParser {
 				microASM.add(sbs);
 		}
 		else if(lib_op.contains(command.toUpperCase())) {
-			String src1 = s[5] != null ? s[3] : s[1];
-			String src2 = s[5] != null ? s[5] : s[3];
+//			System.out.println(Arrays.toString(s));
 			sb.append(command);
 			sb.append("\t");
 			sb.append(register(s[1]));
 			sb.append(',');
-			sb.append(register(src1));
-			sb.append(',');
-			if(src2.matches("\\d\\w*")) 
-				sb.append("0x"+Integer.toHexString(toImm(src2)&0xff));
-			else {
-				sb.append("1*");
-				sb.append(register(src2));
+			if(s[4] != null && s[4].contentEquals("*")) {
+				sb.append(s[1]);
+				sb.append(",");
+				if(s[3].matches("\\d+")) {
+					sb.append(s[3]);
+					sb.append("*");
+					sb.append(register(s[5]));
+				} else {
+					sb.append(s[5]);
+					sb.append("*");
+					sb.append(register(s[3]));
+				}
+			} else if(s[6] != null && s[6].contentEquals("*")) {
+				sb.append(s[3]);
+				sb.append(",");
+				if(s[5].matches("\\d+")) {
+					sb.append(s[5]);
+					sb.append("*");
+					sb.append(register(s[7]));
+				} else {
+					sb.append(s[7]);
+					sb.append("*");
+					sb.append(register(s[5]));
+				}
+			}else {
+				String src = s[4] == null ? s[1] : s[3];
+				String src2 = s[4] == null ? s[3] : s[5];
+				sb.append(register(src));
+				sb.append(",");
+				if(src2.matches("\\d\\w*"))
+					sb.append("0x"+Integer.toHexString(toImm(src2)&0xff));
+				else {
+					sb.append("1*");
+					sb.append(register(src2));
+				}
 			}
 			microASM.add(sb.toString());
 		}
@@ -250,7 +285,7 @@ public class MacroAssemblerParser {
 					String separator = s[i+1];
 					if(arg.matches("\\-?[\\w#]+")) {
 						if(separator == null || separator.contentEquals("+")) {
-							if(arg.matches("\\-?\\d\\w+")) {
+							if(arg.matches("\\-?\\d\\w*")) {
 								offs += toImm(arg);
 							}
 							else  {
@@ -338,7 +373,7 @@ public class MacroAssemblerParser {
 					}else
 						throw new ParseException("Compare does not exist: " + s[3]);
 				}
-				
+//				System.out.println(command + "\t" + Arrays.toString(s));
 				if(s[1].matches("\\-?(0x[0-9A-Fa-f]+|0b[01]+|\\d+)")) {
 					sb.append(command);
 					sb.append(' ');
@@ -357,12 +392,25 @@ public class MacroAssemblerParser {
 				sb.append("\t");
 				sb.append(register(src1));
 				sb.append(',');
-				if(src2.matches("\\d\\w*")) 
-					sb.append("0x"+Integer.toHexString(toImm(src2)&0xff));
-				else {
-					sb.append("1*");
-					sb.append(register(src2));
+				if(s[6] != null && s[6].equals("*")) {
+					if(s[5].matches("\\d+")) {
+						sb.append(s[5]);
+						sb.append("*");
+						sb.append(register(s[7]));
+					}else {
+						sb.append(s[7]);
+						sb.append("*");
+						sb.append(register(s[5]));
+					}
+				} else {
+					if(src2.matches("\\d\\w*")) 
+						sb.append("0x"+Integer.toHexString(toImm(src2)&0xff));
+					else {
+						sb.append("1*");
+						sb.append(register(src2));
+					}
 				}
+				
 			}
 			microASM.add(sb.toString());
 		}
@@ -553,8 +601,8 @@ public class MacroAssemblerParser {
 		
 		if(si == null) {
 			if(label == null)
-			if((toImm(disp)|0x7fff) > 0x7fff)
-				 throw new ParseException("Immediate overload");
+				if((toImm(disp)|0xffff) > 0xffff)
+					 throw new ParseException("Immediate overload");
 			sb.append(base);
 			sb.append('+');
 			if(label == null)
@@ -563,7 +611,7 @@ public class MacroAssemblerParser {
 				sb.append("#");
 		} else {
 			if(label == null)
-			if((toImm(disp)|0x7f) > 0x7f)
+			if((toImm(disp)|0xff) > 0xff)
 				 throw new ParseException("Immediate overload");
 			sb.append(base);
 			sb.append('+');

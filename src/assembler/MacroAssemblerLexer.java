@@ -33,6 +33,7 @@ public class MacroAssemblerLexer {
 		char[] chars = line.toCharArray();
 
 		StringBuilder command = new StringBuilder();
+		
 
 		int i = 0;
 		char c = chars[i];
@@ -54,7 +55,7 @@ public class MacroAssemblerLexer {
 				command.setLength(0);
 				if (++i < len)
 					c = chars[i];
-			} else if (Character.isLetterOrDigit(c) || c == '$') {
+			} else if (Character.isLetterOrDigit(c) || c == '$' || c == '.') {
 				if (command.length() > 0)
 					break;
 				do

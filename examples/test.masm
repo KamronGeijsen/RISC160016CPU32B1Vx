@@ -1,0 +1,8 @@
+	
+	INIT.int r1,1
+	INIT.int r2,1
+	INIT.int r3,1
+1:	MOV r1,r2
+	MOV r2,r3
+	ADD r3,r2,r1
+	JMP 1b
