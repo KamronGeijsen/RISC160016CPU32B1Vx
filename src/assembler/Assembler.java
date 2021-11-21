@@ -18,7 +18,7 @@ public class Assembler {
 //	final static File macroAssembly = new File(dir, "fibonacci.masm");
 //	final static File macroAssembly = new File(dir, "primes3.masm");
 //	final static File macroAssembly = new File(dir, "os.masm");
-	final static File macroAssembly = new File(dir, "o2.uasm");
+	final static File macroAssembly = new File(dir, "test.masm");
 	final static File microAssembly = new File(dir, "o.uasm");
 	final static File binaryText = new File(dir, "o.bin");
 	final static File binaryInstructions = new File(dir, "o.exe");

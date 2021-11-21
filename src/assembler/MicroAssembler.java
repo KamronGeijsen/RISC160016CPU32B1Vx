@@ -125,9 +125,9 @@ public class MicroAssembler {
 	}
 	int toImm(String s) {
 		if(s.startsWith("0x"))
-			return Integer.parseInt(s.substring(2), 16);
+			return (int) Long.parseLong(s.substring(2), 16);
 		if(s.startsWith("0b"))
-			return Integer.parseInt(s.substring(2), 2);
+			return (int) Long.parseLong(s.substring(2), 2);
 		return Integer.parseInt(s);
 	}
 	

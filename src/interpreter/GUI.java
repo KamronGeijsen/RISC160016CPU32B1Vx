@@ -13,7 +13,10 @@ import java.util.ArrayList;
 import javax.swing.JFrame;
 
 import assembler.Disassembler;
+import interpreter.NorthBridge.CPUDebug;
+import interpreter.NorthBridge.GridDisplay;
 import interpreter.NorthBridge.RandomAccessMemoryUnit;
+import interpreter.NorthBridge.RandomAccessMemoryUnitDebug;
 
 /**
  * @author Kamron Geijsen
@@ -96,21 +99,21 @@ public class GUI extends JFrame{
 		}
 	}
 	
-	class Debugger extends GUIPane {
+	class CPUObserver extends GUIPane {
 		
-		Debugger(int x, int y, Interpreter interpreter, RandomAccessMemoryUnit ram){
+		CPUObserver(int x, int y, CPUDebug cpu){
 			super.drawX = x;
 			super.drawY = y;
 			super.drawW = 250;
 			super.drawH = 100;
-			super.title = "Debug";
-			this.interpreter = interpreter;
-			this.ram = ram;
+			super.title = "CPU stats";
+			this.cpu = cpu;
+			
+			lastSecond = System.currentTimeMillis();
 		}
 		
 		long lastSecond;
 		
-		long instrCounter;
 		long lastCountCyclesPerSecond;		
 		long countCyclesPerSecond;
 		long CPUuptimePerSecond;
@@ -118,29 +121,29 @@ public class GUI extends JFrame{
 		long countFramesPerSecond;
 		long lastcountFramesPerSecond;
 		
-
-		int lastAccess;
-		int lastSize;
-		boolean lastSet;
-		boolean active;
-		
-		Interpreter interpreter;
-		RandomAccessMemoryUnit ram;
+		CPUDebug cpu;
 		
 		@Override
 		void draw(Graphics g) {
 			final int x = drawX + 5;
 			int y = drawY+5;
-			g.setColor(Color.white);
-			g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
-			g.drawString("cycles/f : " + instrCounter, x, y+=20);
-			g.drawString("cycles/s : " + lastCountCyclesPerSecond, x, y+=20);
-			g.drawString("uptime   : " + (long)(lastCPUuptimePerSecond/100_000.0)/100.0 + "%", x, y+=20);
-			g.drawString("frames/s : " + lastcountFramesPerSecond, x, y+=20);
-			g.drawRect(drawX, drawY, drawW, drawH);
+			final long instrCounter = cpu.instructions;
+			cpu.instructions = 0;
+			final long uptime = cpu.uptime;
+			cpu.uptime= 0;
+			
+
+			countCyclesPerSecond += instrCounter;
+			CPUuptimePerSecond += uptime;
+			countFramesPerSecond++;
+			
 			final long currentTime = System.currentTimeMillis();
-			if(lastSecond+1000 < currentTime) {
-				lastSecond=currentTime;
+			if(lastSecond < currentTime) {
+				lastSecond += 1000;
+				if(lastSecond < currentTime) {
+					System.out.println("Skipped frame seconds!");
+					lastSecond = currentTime;
+				}
 				lastCountCyclesPerSecond = countCyclesPerSecond; 
 				countCyclesPerSecond=0;
 				lastCPUuptimePerSecond = CPUuptimePerSecond;
@@ -149,9 +152,15 @@ public class GUI extends JFrame{
 				countFramesPerSecond=0;
 			}
 			
-			countCyclesPerSecond += instrCounter;
-			instrCounter = 0;
-			countFramesPerSecond++;
+			g.setColor(Color.white);
+			g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
+			g.drawString("cycles/f : " + instrCounter, x, y+=20);
+			g.drawString("cycles/s : " + lastCountCyclesPerSecond, x, y+=20);
+			g.drawString("uptime   : " + (long)(lastCPUuptimePerSecond/100_000.0)/100.0 + "%", x, y+=20);
+			g.drawString("frames/s : " + lastcountFramesPerSecond, x, y+=20);
+			g.drawRect(drawX, drawY, drawW, drawH);
+			
+			
 			super.drawPaneTitle(g);
 		}
 	}
@@ -182,7 +191,7 @@ public class GUI extends JFrame{
 	}
 	
 	class MemoryObserver extends GUIPane{
-		public MemoryObserver(RandomAccessMemoryUnit RAM, int drawX, int drawY, int w, int h, int tile) {
+		public MemoryObserver(RandomAccessMemoryUnitDebug RAM, int drawX, int drawY, int w, int h, int tile) {
 			super.drawX = drawX;
 			super.drawY = drawY;
 			super.drawW = tile*w;
@@ -191,10 +200,12 @@ public class GUI extends JFrame{
 			this.tile = tile;
 			this.RAM = RAM;
 		}
-		final RandomAccessMemoryUnit RAM;
+		final RandomAccessMemoryUnitDebug RAM;
 		final int tile;
 		final int width = 256;
 		final int height = 256;
+		
+		Interpreter interpreter = null;
 		
 		final int memUnitSize = 32;
 		
@@ -222,16 +233,17 @@ public class GUI extends JFrame{
 			
 			g.drawImage(bf, drawX, drawY, null);
 			
-			for(int mem = 0; mem < northBridge.debugger.lastSize; mem++) {
-				int addr = northBridge.debugger.lastAccess+mem;
-				g.setColor(RAM.GET(addr, (byte) 1) == 1?(northBridge.debugger.lastSet?Color.RED:Color.GREEN):Color.DARK_GRAY);
+			for(int mem = 0; mem < RAM.lastSize; mem++) {
+				int addr = RAM.lastAccess+mem;
+				g.setColor(RAM.GET(addr, (byte) 1) == 1?(RAM.lastSet?Color.RED:Color.GREEN):Color.DARK_GRAY);
 				g.fillRect(this.drawX+(addr&0xff)*tile, this.drawY+((addr>>8)&0xff)*tile, tile, tile);
 			}
-			for(int mem = 0; mem < 32; mem++) {
-				int addr = northBridge.debugger.interpreter.rIP*32+mem;
-				g.setColor(RAM.GET(addr, (byte) 1) == 1?Color.CYAN:Color.DARK_GRAY);
-				g.fillRect(this.drawX+(addr&0xff)*tile, this.drawY+((addr>>8)&0xff)*tile, tile, tile);
-			}
+			if(interpreter != null)
+				for(int mem = 0; mem < 32; mem++) {
+					int addr = interpreter.rIP*32+mem;
+					g.setColor(RAM.GET(addr, (byte) 1) == 1?Color.CYAN:Color.DARK_GRAY);
+					g.fillRect(this.drawX+(addr&0xff)*tile, this.drawY+((addr>>8)&0xff)*tile, tile, tile);
+				}
 			g.setColor(Color.WHITE);
 			g.drawRect(drawX, drawY, drawW, drawH);
 			super.drawPaneTitle(g);
@@ -248,13 +260,10 @@ public class GUI extends JFrame{
 			super.drawH = tileY*32;
 			super.title = "Registers";
 			this.interpreter = interpreter;
-//			this.pointerTo_reg = reg;
-//			this.pointerTo_regSize = regSize;
 		}
 		
-//		final long[] pointerTo_reg; 
-//		final byte[] pointerTo_regSize;
 		final Interpreter interpreter;
+		RandomAccessMemoryUnit ram = null;
 		
 		final Font f;
 		final int tileX, tileY;
@@ -284,40 +293,38 @@ public class GUI extends JFrame{
 			}
 			g.setColor(Color.WHITE);
 			g.drawString("rIP", this.drawX+33*tileX, this.drawY+33*tileY+tileY-2);
-			for(int x = 0; x < 32; x++) {
-				String s = (northBridge.debugger.ram.data[interpreter.rIP]&(1<<x))!=0?"1":"0";
-				g.drawString(s, this.drawX+(31-x)*tileX+1, this.drawY+tileY*34+tileY-2);
+			if(ram != null) {
+				for(int x = 0; x < 32; x++) {
+					String s = (ram.data[interpreter.rIP]&(1<<x))!=0?"1":"0";
+					g.drawString(s, this.drawX+(31-x)*tileX+1, this.drawY+tileY*34+tileY-2);
+				}
+				g.setColor(Color.WHITE);
+				g.drawString("rIR", this.drawX+33*tileX, this.drawY+34*tileY+tileY-2);
+				String s = disassembler.disassemble(ram.data[interpreter.rIP]).replaceAll("\t", "  ");
+				g.drawString(s, this.drawX+2*tileX+1, this.drawY+35*tileY+tileY-2);
+				g.drawRect(this.drawX, this.drawY+tileY*32, tileX*37, tileY*4);
 			}
-			g.setColor(Color.WHITE);
-			g.drawString("rIR", this.drawX+33*tileX, this.drawY+34*tileY+tileY-2);
-			String s = disassembler.disassemble(northBridge.debugger.ram.data[interpreter.rIP]).replaceAll("\t", "  ");
-			g.drawString(s, this.drawX+2*tileX+1, this.drawY+35*tileY+tileY-2);
-			g.drawRect(this.drawX, this.drawY+tileY*32, tileX*37, tileY*4);
+			
+			
 			super.drawPaneTitle(g);
 		}
 	}
 	class GridObserver extends GUIPane {
-		public GridObserver(RandomAccessMemoryUnit RAM, int drawX, int drawY, int baseAddress, int w, int h, int tile, int bitDepth, int mode) {
+		public GridObserver(GridDisplay gridDisplay, int drawX, int drawY, int w, int h, int tile) {
 			super.drawX = drawX;
 			super.drawY = drawY;
-			super.drawW = w * (mode == 3 ? tile/2 : tile);
+			super.drawW = w * (gridDisplay.mode == 3 ? tile/2 : tile);
 			super.drawH = h * tile;
 			super.title = "Screen";
-			this.RAM = RAM;
-			this.baseAddress = baseAddress;
+			this.gridDisplay = gridDisplay;
 			this.w = w;
 			this.h = h;
 			this.tile = tile;
-			this.bitDepth = bitDepth;
-			bitScale = Integer.numberOfTrailingZeros(bitDepth);
-			this.mode = mode;
 		}
 		
-		final RandomAccessMemoryUnit RAM;
-		final int baseAddress;
+		final GridDisplay gridDisplay;
 		final int tile;
 		final int w, h;
-		final int bitDepth, bitScale, mode;
 		
 		/*
 		 * 
@@ -334,6 +341,18 @@ public class GUI extends JFrame{
 		 16-color HSV/Gray (12 hue increments of 30, 4 grayscale colors) 
 		 
 		 */
+		public long GET(int address) {
+			final int intAlligned = address >>> 5;
+			final int unaligned = address & 0b11111;
+			long result = gridDisplay.data[intAlligned];
+			result >>>= unaligned;
+			result &= (1l<<gridDisplay.bitDepth)-1;
+			return result;
+		}
+//		long GET(int addr) {
+//			
+//			return gridDisplay.data[addr/Integer.SIZE << gridDisplay.bitScale] & ((1<<gridDisplay.bitDepth)-1);
+//		}
 		
 		@Override
 		void draw(Graphics g) {
@@ -341,8 +360,8 @@ public class GUI extends JFrame{
 			g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 15));
 			for(int y = 0, drawY = this.drawY; y < h; y++) {
 				for(int x = 0, drawX = this.drawX; x < w; x++) {
-					if(mode == 0) {
-						int grayscale = (int) (RAM.GET(baseAddress+(y*w+x<<bitScale), (byte) bitDepth)*256/((1<<bitDepth)-1));
+					if(gridDisplay.mode == 0) {
+						int grayscale = (int) (GET(y*w+x)*256/((1<<gridDisplay.bitDepth)-1));
 						grayscale = Math.min(grayscale, 255);
 						g.setColor(new Color(grayscale * 0x00010101));
 						g.fillRect(drawX, drawY, tile, tile);
@@ -351,13 +370,13 @@ public class GUI extends JFrame{
 						drawX += tile;
 					}
 					
-					else if(mode == 3) {
-						long value = RAM.GET(baseAddress+(y*w+x<<bitScale), (byte) bitDepth);
-						g.setColor(Color.WHITE);
-						g.drawString(""+(char)value, drawX+1, drawY+tile-5);;
-						g.drawRect(drawX, drawY, tile/2, tile);
-						drawX += tile/2;
-					}
+//					else if(mode == 3) {
+//						long value = RAM.GET(baseAddress+(y*w+x<<bitScale), (byte) bitDepth);
+//						g.setColor(Color.WHITE);
+//						g.drawString(""+(char)value, drawX+1, drawY+tile-5);;
+//						g.drawRect(drawX, drawY, tile/2, tile);
+//						drawX += tile/2;
+//					}
 				}
 				drawY += tile;
 			}

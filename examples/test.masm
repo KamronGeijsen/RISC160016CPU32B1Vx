@@ -1,8 +1,53 @@
+	$INIT	zero
+	INIT.int	nbh, [nbhAddrROM]
+	INIT.byte	tmp, 2
+	SET			tmp, [nbh+8]
+	INIT.byte	tmp, 3
+	SET			tmp, [nbh+16]
+	INIT.byte	tmp, 4
+	SET			tmp, [nbh+24]
+	INIT.byte	tmp, 5
+	SET			tmp, [nbh+32]
+	INIT.byte	tmp, 6
+	SET			tmp, [nbh+40]
+	INIT.byte	tmp, 8
+	SET			tmp, [nbh+64]
+	$FREE	nbh, tmp
 	
-	INIT.int r1,1
-	INIT.int r2,1
-	INIT.int r3,1
-1:	MOV r1,r2
-	MOV r2,r3
-	ADD r3,r2,r1
+	INIT.int	gridAddr=r10, [gridAddrROM]
+	INIT.int	timerAddr=r11, [timerAddrROM]
+	INIT.int	timerInterrupterAddr=r12, [timerInterrupterAddrROM]
+	INIT.int	printAddr=r18, [printAddrROM]
+	
+	
+	
+	INIT.int	r1, 1
+	INIT.int	r2, 1
+	INIT.int	r3, 1
+	SET			r1, [printAddr]
+	SET			r1, [printAddr]
+	
+1:	MOV 		r1, r2
+	MOV 		r2, r3
+	ADD 		r3, r2, r1
+	SET			r3, [printAddr]
+	SET			r3, [gridAddr]
+	INIT.int	rf, [timerAddr]
+	SET			rf, [printAddr]
 	JMP 1b
+	
+
+nbhAddrROM:
+	$data.int 0xff000000
+cpuAddrROM:
+	$data.int 0x01000000
+cpuInterrupterAddrROM:
+	$data.int 0x02000000
+gridAddrROM:
+	$data.int 0x03000000
+timerAddrROM:
+	$data.int 0x04000000
+timerInterrupterAddrROM:
+	$data.int 0x05000000
+printAddrROM:
+	$data.int 0x08000000

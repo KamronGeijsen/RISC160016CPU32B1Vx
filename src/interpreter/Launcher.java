@@ -7,12 +7,17 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 
 import assembler.Assembler;
-import interpreter.GUI.Debugger;
+import interpreter.GUI.CPUObserver;
+import interpreter.GUI.GridObserver;
 import interpreter.GUI.MemoryObserver;
 import interpreter.GUI.RegObserver;
-import interpreter.NorthBridge.CPU;
-import interpreter.NorthBridge.DirectMemoryAccessBufferWriter;
-import interpreter.NorthBridge.RandomMemoryAccessUnitDebug;
+import interpreter.NorthBridge.CPUDebug;
+import interpreter.NorthBridge.GridDisplay;
+import interpreter.NorthBridge.InterruptHandler;
+import interpreter.NorthBridge.PrintInt;
+import interpreter.NorthBridge.RandomAccessMemoryUnitDebug;
+import interpreter.NorthBridge.Timer;
+import interpreter.NorthBridge.TimerInterrupter;
 import lib.ExecutableLinkableFormat;
 
 public class Launcher {
@@ -55,13 +60,29 @@ public class Launcher {
 		
 		
 		GUI compileGUI() {
-			NorthBridge northBridge = new NorthBridge(null);
-			RandomMemoryAccessUnitDebug ram = northBridge.new RandomMemoryAccessUnitDebug(
-					northBridge.new RandomAccessMemoryUnit(65536));
-			CPU cpu = northBridge.new CPU();
-
-			northBridge.connectPeripheral(cpu, 1);
-			northBridge.connectPeripheral(ram, 2);
+			NorthBridge northBridge = new NorthBridge();
+			RandomAccessMemoryUnitDebug ram = northBridge.new RandomAccessMemoryUnitDebug(65536);
+			CPUDebug cpu = northBridge.new CPUDebug();
+			InterruptHandler interruptHandler = northBridge.new InterruptHandler();
+			GridDisplay gridDisplay = northBridge.new GridDisplay(16*16, 1, 0);
+			Timer timer = northBridge.new Timer();
+			TimerInterrupter timerInterrupter = northBridge.new TimerInterrupter();
+			PrintInt printInt = northBridge.new PrintInt();
+			
+			
+			northBridge.connectPeripheral(ram, 1);
+			northBridge.connectPeripheral(cpu, 2);
+			northBridge.connectPeripheral(timerInterrupter, 3);
+			northBridge.connectPeripheral(gridDisplay, 4);
+			northBridge.connectPeripheral(timer, 5);
+			northBridge.connectPeripheral(timerInterrupter, 6);
+			
+			northBridge.connectPeripheral(printInt, 8);
+			
+			
+			
+			northBridge.SET(0xff000000, (byte)8, 1);
+			
 			
 			{
 				
@@ -76,8 +97,9 @@ public class Launcher {
 					int[] arr = new int[intBuf.remaining()];
 					intBuf.get(arr);
 					
-					DirectMemoryAccessBufferWriter programLoadBuffer = northBridge.new DirectMemoryAccessBufferWriter(ram, 0, 0, arr.length*32, (byte) 32);
-					programLoadBuffer.putAligned(arr);
+//					DirectMemoryAccessBufferWriter programLoadBuffer = northBridge.new DirectMemoryAccessBufferWriter(ram, 0, 0, arr.length*32, (byte) 32);
+//					programLoadBuffer.putAligned(arr);
+					System.arraycopy(arr, 0, ram.data, 0, arr.length);
 					
 				} catch (IOException e) {
 					System.err.println("Error while loading in " + inputFile);
@@ -87,15 +109,21 @@ public class Launcher {
 			}
 
 			
+			
+			
 			GUI gui = new GUI(northBridge);
-			Debugger debugger = gui.new Debugger(600, 700, cpu.interpreter, ram);
-			northBridge.debugger = debugger;
+			CPUObserver cpuObserver = gui.new CPUObserver(600, 700, cpu);
 			MemoryObserver memoryObserver = gui.new MemoryObserver(ram, 50, 50, 256, 256, 2);
 			RegObserver regObserver = gui.new RegObserver(cpu.interpreter, 600, 50, 16);
+			GridObserver gridObserver = gui.new GridObserver(gridDisplay, 100, 600, 16, 16, 20);
 			
 			gui.panes.add(regObserver);
 			gui.panes.add(memoryObserver);
-			gui.panes.add(debugger);
+			gui.panes.add(cpuObserver);
+			gui.panes.add(gridObserver);
+			
+			
+			cpu.unpause();
 			
 			return gui;
 		}

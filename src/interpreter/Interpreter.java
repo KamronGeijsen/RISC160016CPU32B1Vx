@@ -35,7 +35,6 @@ public class Interpreter {
 	public void executeInstr(final long instr) {
 		if (instr == 0) {
 			interrupted = true;
-			return;
 		}
 		final int MOP = (int) ((instr >> 26) & 0xf);
 
